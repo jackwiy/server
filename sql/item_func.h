@@ -352,6 +352,16 @@ public:
     return Item_args::excl_dep_on_in_subq_left_part(subq_pred);
   }
 
+  bool excl_func_dep_on_grouping_fields(st_select_lex *sl,
+                                        List<Item> *det_items,
+                                        Item **item);
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    return Item_args::excl_func_dep_from_equalities(sl, item, fields);
+  }
+
   /*
     We assume the result of any function that has a TIMESTAMP argument to be
     timezone-dependent, since a TIMESTAMP value in both numeric and string
@@ -458,6 +468,9 @@ public:
   {
     Type_geometry_attributes::set_geometry_type(type);
   }
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields);
 };
 
 
@@ -1999,6 +2012,13 @@ public:
   bool const_item() const { return true; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_coercibility>(thd, this); }
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    fields->empty();
+    return false;
+  }
 };
 
 

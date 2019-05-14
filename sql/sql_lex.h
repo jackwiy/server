@@ -1568,6 +1568,10 @@ public:
   void add_statistics(SELECT_LEX_UNIT *unit);
   bool make_unique_derived_name(THD *thd, LEX_CSTRING *alias);
   void lex_start(LEX *plex);
+  bool collect_gb_fields(List<TABLE_LIST> *mat_derived,
+                         List<Item> &gb_items);
+  bool are_select_list_fields_allowed(List<Item> *det_items);
+  bool check_func_dep();
 };
 typedef class st_select_lex SELECT_LEX;
 
@@ -4798,6 +4802,7 @@ void sp_create_assignment_lex(THD *thd, bool no_lookahead);
 bool sp_create_assignment_instr(THD *thd, bool no_lookahead);
 
 void mark_or_conds_to_avoid_pushdown(Item *cond);
+
 
 #endif /* MYSQL_SERVER */
 #endif /* SQL_LEX_INCLUDED */

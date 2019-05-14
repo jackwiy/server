@@ -3367,6 +3367,94 @@ void Item_func_case_simple::print(String *str, enum_query_type query_type)
 }
 
 
+/**
+  This method is quite similar with
+  Item_func_case_simple::excl_func_dep_on_grouping_fields() method
+
+  This method is called for such an expression:
+
+  (CASE ...) = f(non_gr_field)
+
+  to check if from (CASE ...) it can be said that f(non_gr_field)
+  is functionally dependent on grouping fields.
+
+  Consider example:
+
+  ( CASE case_arg
+    WHEN case1 THEN result1
+    ELSE result2) = f(non_gr_field)
+
+  The only case when f(non_gr_field) will be said to be dependent on
+  grouping fields is when:
+
+  case_arg is a field that is functionally dependent on grouping fields.
+  All other arguments are functionally dependent on grouping fields
+  or are constants.
+
+  => f(non_gr_fields) is functionally dependent on case_arg.
+
+  It is also checked if all arguments has one comparison type,
+  WHEN arguments are the invariants of the case_arg comparion type and
+  all ELSE and THEN arguments are of the same type.
+*/
+
+bool
+Item_func_case_simple::excl_func_dep_from_equalities(st_select_lex *sl,
+                                                     Item **item,
+                                                     List<Field> *fields)
+{
+  bool dep= true;
+  bool dep_arg= true;
+  const Type_handler *first_expr_cmp_handler;
+
+  first_expr_cmp_handler= args[0]->type_handler_for_comparison();
+  if (m_found_types != (1UL << first_expr_cmp_handler->cmp_type()))
+  {
+    fields->empty();
+    return false;
+  }
+  dep_arg=
+    args[0]->excl_func_dep_from_equalities(sl, item, fields);
+  if (!dep_arg && fields->is_empty())
+    return false;
+  dep&= dep_arg;
+
+  Type_handler_hybrid_field_type tmp(first_expr_cmp_handler);
+  uint i, count= when_count();
+  for (i= 1; i <= count; i++)
+  {
+    if (tmp.aggregate_for_comparison(args[i]->type_handler_for_comparison()))
+    {
+      fields->empty();
+      return false;
+    }
+    dep_arg=
+      args[i]->excl_func_dep_from_equalities(sl, item, fields);
+    if (!dep_arg && fields->is_empty())
+      return false;
+    dep&= dep_arg;
+  }
+
+  const Type_handler *then_cmp_handler=
+    args[i]->type_handler_for_comparison();
+  Type_handler_hybrid_field_type tmp_then(then_cmp_handler);
+  for (; i < arg_count; i++)
+  {
+    if (tmp_then.aggregate_for_comparison(
+          args[i]->type_handler_for_comparison()))
+    {
+      fields->empty();
+      return false;
+    }
+    dep_arg= args[i]->excl_func_dep_from_equalities(sl, item, fields);
+    if (!dep_arg && fields->is_empty())
+      return false;
+    dep&= dep_arg;
+  }
+  return dep;
+}
+
+
 void Item_func_decode_oracle::print(String *str, enum_query_type query_type)
 {
   str->append(func_name());
@@ -5236,6 +5324,25 @@ bool Item_cond::excl_dep_on_grouping_fields(st_select_lex *sel)
   {
     if (!item->excl_dep_on_grouping_fields(sel))
       return false;
+  }
+  return true;
+}
+
+
+bool Item_cond::excl_func_dep_on_grouping_fields(st_select_lex *sl,
+                                                 List<Item> *det_items,
+                                                 Item **item)
+{
+  List_iterator_fast<Item> li(list);
+  Item *item_it;
+  while ((item_it= li++))
+  {
+    if (!item_it->excl_func_dep_on_grouping_fields(sl, det_items, item))
+    {
+      if (((Item *) this)->is_group_by_item(det_items))
+        return true;
+      return false;
+    }
   }
   return true;
 }

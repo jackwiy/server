@@ -727,6 +727,51 @@ Item *Item_func::get_tmp_table_item(THD *thd)
   return copy_or_same(thd);
 }
 
+
+bool Item_func::excl_func_dep_on_grouping_fields(st_select_lex *sl,
+                                                 List<Item> *det_items,
+                                                 Item **item)
+{
+  if (!Item_args::excl_func_dep_on_grouping_fields(sl, det_items,
+                                                   item) &&
+      !is_group_by_item(det_items))
+    return false;
+  return true;
+}
+
+
+bool Item_hybrid_func::excl_func_dep_from_equalities(st_select_lex *sl,
+                                                     Item **item,
+                                                     List<Field> *fields)
+{
+  bool dep= true;
+  Item *args0= arguments()[0];
+  for (uint i= 0; i < argument_count(); i++)
+  {
+    bool dep_arg=
+      arguments()[i]->excl_func_dep_from_equalities(sl, item, fields);
+    if (!dep_arg && fields->is_empty())
+      return false;
+    if (args0->type_handler_for_comparison() !=
+        arguments()[i]->type_handler_for_comparison())
+    {
+      if (!((args0->cmp_type() == INT_RESULT ||
+          args0->cmp_type()== REAL_RESULT ||
+          args0->cmp_type() == DECIMAL_RESULT) &&
+          (args[i]->cmp_type() == INT_RESULT ||
+           args[i]->cmp_type()== REAL_RESULT ||
+           args[i]->cmp_type() == DECIMAL_RESULT)))
+      {
+        fields->empty();
+        return false;
+      }
+    }
+    dep&= dep_arg;
+  }
+  return dep;
+}
+
+
 double Item_int_func::val_real()
 {
   DBUG_ASSERT(fixed == 1);

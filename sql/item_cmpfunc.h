@@ -888,6 +888,13 @@ public:
   bool eq(const Item *item, bool binary_cmp) const;
   CHARSET_INFO *compare_collation() const { return cmp_collation.collation; }
   Item* propagate_equal_fields(THD *, const Context &, COND_EQUAL *) = 0;
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    fields->empty();
+    return false;
+  }
 };
 
 
@@ -2270,6 +2277,8 @@ public:
   } 
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_case_simple>(thd, this); }
+  bool excl_func_dep_from_equalities(st_select_lex *sl, Item **item,
+                                     List<Field> *fields);
 };
 
 
@@ -2462,6 +2471,56 @@ public:
   bool to_be_transformed_into_in_subq(THD *thd);
   bool create_value_list_for_tvc(THD *thd, List< List<Item> > *values);
   Item *in_predicate_to_in_subs_transformer(THD *thd, uchar *arg);
+  bool excl_func_dep_on_grouping_fields(st_select_lex *sl,
+                                        List<Item> *det_items,
+                                        Item **item)
+  {
+    if (!args[0]->excl_func_dep_on_grouping_fields(sl, det_items, item))
+    {
+      if (is_group_by_item(det_items))
+        return true;
+      return false;
+    }
+    for (uint i= 0; i < comparator_count(); i++)
+    {
+      uint idx= get_comparator_arg_index(i);
+      if (!args[idx]->excl_func_dep_on_grouping_fields(sl, det_items,
+                                                       item))
+      {
+        if (is_group_by_item(det_items))
+          return true;
+        return false;
+      }
+    }
+    return true;
+  }
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    bool dep= true;
+    bool dep_arg= true;
+    if (!arg_types_compatible)
+    {
+      fields->empty();
+      return false;
+    }
+    dep_arg=
+      args[0]->excl_func_dep_from_equalities(sl, item, fields);
+    if (!dep_arg && fields->is_empty())
+      return false;
+    dep&= dep_arg;
+    for (uint i= 0; i < comparator_count(); i++)
+    {
+      uint idx= get_comparator_arg_index(i);
+      dep_arg=
+        args[idx]->excl_func_dep_from_equalities(sl, item, fields);
+      if (!dep_arg && fields->is_empty())
+        return false;
+      dep&= dep_arg;
+    }
+    return dep;
+  }
 };
 
 class cmp_item_row :public cmp_item
@@ -2782,6 +2841,18 @@ public:
   
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_like>(thd, this); }
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    uint flags= Item_func_like::compare_collation()->state;
+    if (!((flags & MY_CS_NOPAD) && !(flags & MY_CS_NON1TO1)))
+    {
+      fields->empty();
+      return false;
+    }
+    return Item_args::excl_func_dep_from_equalities(sl, item, fields);
+  }
 };
 
 
@@ -3012,6 +3083,16 @@ public:
   Item *build_clone(THD *thd);
   bool excl_dep_on_table(table_map tab_map);
   bool excl_dep_on_grouping_fields(st_select_lex *sel);
+  bool excl_func_dep_on_grouping_fields(st_select_lex *sl,
+                                        List<Item> *det_items,
+                                        Item **item);
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    fields->empty();
+    return false;
+  }
 };
 
 template <template<class> class LI, class T> class Item_equal_iterator;

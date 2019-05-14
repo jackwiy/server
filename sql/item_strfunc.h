@@ -67,6 +67,9 @@ public:
   const Type_handler *type_handler() const { return string_type_handler(); }
   void left_right_max_length();
   bool fix_fields(THD *thd, Item **ref);
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields);
 };
 
 
@@ -461,6 +464,20 @@ public:
   const char *func_name() const { return "left"; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_left>(thd, this); }
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    if (args[0]->cmp_type() != STRING_RESULT &&
+        (args[1]->cmp_type() != INT_RESULT ||
+         args[1]->cmp_type()!= REAL_RESULT ||
+         args[1]->cmp_type() != DECIMAL_RESULT))
+    {
+      fields->empty();
+      return false;
+    }
+    return Item_args::excl_func_dep_from_equalities(sl, item, fields);
+  }
 };
 
 
@@ -474,6 +491,20 @@ public:
   const char *func_name() const { return "right"; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_right>(thd, this); }
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    if (args[0]->cmp_type() != STRING_RESULT &&
+        (args[1]->cmp_type() != INT_RESULT ||
+         args[1]->cmp_type()!= REAL_RESULT ||
+         args[1]->cmp_type() != DECIMAL_RESULT))
+    {
+      fields->empty();
+      return false;
+    }
+    return Item_args::excl_func_dep_from_equalities(sl, item, fields);
+  }
 };
 
 
@@ -491,6 +522,20 @@ public:
   const char *func_name() const { return "substr"; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_substr>(thd, this); }
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    if (args[0]->cmp_type() != STRING_RESULT &&
+        (args[1]->cmp_type() != INT_RESULT ||
+         args[1]->cmp_type()!= REAL_RESULT ||
+         args[1]->cmp_type() != DECIMAL_RESULT))
+    {
+      fields->empty();
+      return false;
+    }
+    return Item_args::excl_func_dep_from_equalities(sl, item, fields);
+  }
 };
 
 class Item_func_substr_oracle :public Item_func_substr
@@ -1521,6 +1566,13 @@ public:
   Item* propagate_equal_fields(THD *thd, const Context &ctx, COND_EQUAL *cond)
   { return this; }
   bool const_item() const { return true; }
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    fields->empty();
+    return false;
+  }
 };
 
 
@@ -1580,6 +1632,13 @@ public:
   void print(String *str, enum_query_type query_type);
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_weight_string>(thd, this); }
+  bool excl_func_dep_from_equalities(st_select_lex *sl,
+                                     Item **item,
+                                     List<Field> *fields)
+  {
+    fields->empty();
+    return false;
+  }
 };
 
 class Item_func_crc32 :public Item_long_func

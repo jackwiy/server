@@ -5366,3 +5366,27 @@ longlong Item_func_wsrep_sync_wait_upto::val_int()
   return 1LL;
 }
 #endif /* WITH_WSREP */
+
+
+bool Item_str_func::excl_func_dep_from_equalities(st_select_lex *sl,
+                                                  Item **item,
+                                                  List<Field> *fields)
+{
+  bool dep= true;
+  Item *args0= arguments()[0];
+  for (uint i= 0; i < argument_count(); i++)
+  {
+    bool dep_arg=
+      arguments()[i]->excl_func_dep_from_equalities(sl, item, fields);
+    if (!dep_arg && fields->is_empty())
+      return false;
+    if (args0->type_handler_for_comparison() !=
+        arguments()[i]->type_handler_for_comparison())
+    {
+      fields->empty();
+      return false;
+    }
+    dep&= dep_arg;
+  }
+  return dep;
+}
