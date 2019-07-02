@@ -1,8 +1,20 @@
 let $datadir=`select @@datadir`;
-drop table if exists mysql_json; 
 
 --echo #
---echo # Array test
+--echo # Array test with json array
+--echo #
+
+# Make sure you have placed `json.[frm/myd/myi]` files in `source/mysql-test/std_data/`
+--copy_file std_data/simple_array1.frm $datadir/test/mysql_json_array.frm
+--copy_file std_data/simple_array1.MYI $datadir/test/mysql_json_array.MYI
+--copy_file std_data/simple_array1.MYD $datadir/test/mysql_json_array.MYD
+
+# Now can read 
+select * from test.mysql_json_array;
+drop table test.mysql_json_array;
+
+--echo #
+--echo # Array test with json object
 --echo #
 
 
@@ -14,4 +26,4 @@ drop table if exists mysql_json;
 
 # Now can read 
 select * from test.mysql_json;
-drop table mysql_json;
+drop table test.mysql_json;

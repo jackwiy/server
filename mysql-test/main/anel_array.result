@@ -1,11 +1,19 @@
-drop table if exists mysql_json;
-Warnings:
-Note	1051	Unknown table 'test.mysql_json'
 #
-# Array test
+# Array test with json array
+#
+select * from test.mysql_json_array;
+j
+[1,2,3,4,5,[],"a","b","c"]
+Finshed
+Warnings:
+Error	145	Table './test/mysql_json_array' is marked as crashed and should be repaired
+Error	1034	1 client is using or hasn't closed the table properly
+drop table test.mysql_json_array;
+#
+# Array test with json object
 #
 select * from test.mysql_json;
 t
 {"a":[1,2],"b":["x","y"]}
 Finshed
-drop table mysql_json;
+drop table test.mysql_json;
