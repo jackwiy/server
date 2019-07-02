@@ -128,7 +128,8 @@ bool parse_array_or_object(String *buffer,Field_mysql_json::enum_type t,
 
       key_json_offset= 2*offset_size+i*(large?KEY_ENTRY_SIZE_LARGE:KEY_ENTRY_SIZE_SMALL);
       key_json_start= read_offset_or_size(data+key_json_offset,large);
-      key_json_len= read_offset_or_size(data+key_json_offset+offset_size, large);
+      //keys are always 2 bytes
+      key_json_len= read_offset_or_size(data+key_json_offset+offset_size, false);
       
       key_element= new char[key_json_len+1];
       memmove(key_element, const_cast<char*>(&data[key_json_start]), key_json_len);
@@ -264,6 +265,46 @@ bool parse_array_or_object(String *buffer,Field_mysql_json::enum_type t,
   } // end for
   
   return false;
+}
+
+/**
+  Read a variable length written by append_variable_length().
+
+  @param[in] data  the buffer to read from
+  @param[in] data_length  the maximum number of bytes to read from data
+  @param[out] length  the length that was read
+  @param[out] num  the number of bytes needed to represent the length
+  @return  false on success, true on error
+*/
+static bool read_variable_length(const char *data, size_t data_length,
+                                 size_t *length, size_t *num)
+{
+  /*
+    It takes five bytes to represent UINT_MAX32, which is the largest
+    supported length, so don't look any further.
+  */
+  const size_t max_bytes= 5; //std::min(data_length, static_cast<size_t>(5));
+
+  size_t len= 0;
+  for (size_t i= 0; i < max_bytes; i++)
+  {
+    // Get the next 7 bits of the length.
+    len|= (data[i] & 0x7f) << (7 * i);
+    if ((data[i] & 0x80) == 0)
+    {
+      // The length shouldn't exceed 32 bits.
+      if (len > UINT_MAX32)
+        return true;                          /* purecov: inspected */
+
+      // This was the last byte. Return successfully.
+      *num= i + 1;
+      *length= len;
+      return false;
+    }
+  }
+
+  // No more available bytes. Return true to signal error.
+  return true;                                /* purecov: inspected */
 }
 
 bool parse_mysql_scalar(String* buffer, size_t value_json_type,
@@ -408,13 +449,20 @@ bool parse_mysql_scalar(String* buffer, size_t value_json_type,
     /** FINISHED WORKS **/
     case JSONB_TYPE_STRING:
     {
-      size_t value_length;
+      size_t value_length, n;
       char *value_element;
-      value_length= (uint) data[0];
+    
+      if (read_variable_length(data, len, &value_length, &n))
+        return true;                         /* purecov: inspected */
+      if (len < n + value_length)
+        return true;
+      
+      //value_length= (uint) data[0];
       value_element= new char[value_length+1];
-      memmove(value_element, const_cast<char*>(&data[1]),
+      memmove(value_element, const_cast<char*>(&data[n]),
               value_length);
       value_element[value_length]= '\0';
+
       if(buffer->append('"'))
       {
         return true;

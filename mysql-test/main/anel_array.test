@@ -1,6 +1,19 @@
 let $datadir=`select @@datadir`;
 
 --echo #
+--echo # Array test with JSONB_TYPE_LARGE_OBJECT 
+--echo #
+
+# Make sure you have placed `json.[frm/myd/myi]` files in `source/mysql-test/std_data/`
+--copy_file std_data/long_string_JSONB_TYPE_LARGE_OBJECT.frm $datadir/test/mysql_json_array_long.frm
+--copy_file std_data/long_string_JSONB_TYPE_LARGE_OBJECT.MYI $datadir/test/mysql_json_array_long.MYI
+--copy_file std_data/long_string_JSONB_TYPE_LARGE_OBJECT.MYD $datadir/test/mysql_json_array_long.MYD
+
+# Now can read 
+select * from test.mysql_json_array_long;
+drop table test.mysql_json_array_long;
+
+--echo #
 --echo # Array test with json array
 --echo #
 
