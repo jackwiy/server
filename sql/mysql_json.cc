@@ -137,17 +137,19 @@ bool parse_array_or_object(String *buffer,Field_mysql_json::enum_type t,
 
       if(buffer->append('"'))
       {
+        delete[] key_element;
         return true;
       }
       if( buffer->append(String((const char *)key_element, &my_charset_bin)) )
       {
+        delete[] key_element;
         return true;
       }
+      delete[] key_element;
       if(buffer->append('"'))
       {
         return true;
       }
-      delete[] key_element;
       if(buffer->append(":"))
       {
         return true;
@@ -375,6 +377,7 @@ bool parse_mysql_scalar(String* buffer, size_t value_json_type,
       value_element[num_bytes+1]= '\0';
       if( buffer->append_longlong(sint4korr(value_element)))
       {
+        delete[] value_element;
         return true;
       }
       delete[] value_element;
@@ -391,6 +394,7 @@ bool parse_mysql_scalar(String* buffer, size_t value_json_type,
       value_element[num_bytes+1]= '\0';
       if( buffer->append_longlong(sint8korr(value_element)))
       {
+        delete[] value_element;
         return true;
       }
       delete[] value_element;
@@ -427,6 +431,7 @@ bool parse_mysql_scalar(String* buffer, size_t value_json_type,
       value_element[num_bytes+1]= '\0';
       if( buffer->append_ulonglong(uint8korr(value_element)))
       {
+        delete[] value_element;
         return true;
       }
       delete[] value_element;
@@ -465,17 +470,19 @@ bool parse_mysql_scalar(String* buffer, size_t value_json_type,
 
       if(buffer->append('"'))
       {
+        delete[] value_element;
         return true;
       }
       if( buffer->append(String((const char *)value_element, &my_charset_bin)))
       {
+        delete[] value_element;
         return true;
       }
+      delete[] value_element;
       if(buffer->append('"'))
       {
         return true;
       }
-      delete[] value_element;
       break;
     }
 
@@ -502,14 +509,12 @@ bool parse_mysql_scalar(String* buffer, size_t value_json_type,
         case MYSQL_TYPE_TIME: 
         {
           TIME_from_longlong_time_packed(&t, sint8korr(value_element));
-          delete[] value_element;
           break;
         }
         case MYSQL_TYPE_DATE:
         {
           //TIME_from_longlong_date_packed(ltime, packed_value); //not defined in sql/compat56.h
           TIME_from_longlong_datetime_packed(&t, sint8korr(value_element));
-          delete[] value_element;
           t.time_type= MYSQL_TIMESTAMP_DATE;
           break;
         } 
@@ -517,7 +522,6 @@ bool parse_mysql_scalar(String* buffer, size_t value_json_type,
         case MYSQL_TYPE_TIMESTAMP: 
         {
           TIME_from_longlong_datetime_packed(&t, sint8korr(value_element));
-          delete[] value_element;
           break;
         }
         case MYSQL_TYPE_NEWDECIMAL:
@@ -545,6 +549,7 @@ bool parse_mysql_scalar(String* buffer, size_t value_json_type,
         default:
           return false;
       }
+      delete[] value_element;
       // This part is common to datetime/date/timestamp
       char *ptr= const_cast<char *>(buffer->ptr())+buffer->length();
       const int size= my_TIME_to_str(&t, ptr, 6);
