@@ -21,6 +21,8 @@
 INCLUDE(innodb.cmake)
 
 SET(INNOBASE_SOURCES
+	aio/aio_simulated.cc
+	aio/aiocb_cache.h
 	btr/btr0btr.cc
 	btr/btr0bulk.cc
 	btr/btr0cur.cc
@@ -59,6 +61,8 @@ SET(INNOBASE_SOURCES
 	ha/ha0ha.cc
 	ha/ha0storage.cc
 	ha/hash0hash.cc
+	include/aio0aio.h
+	include/tp0tp.h
 	fts/fts0fts.cc
 	fts/fts0ast.cc
 	fts/fts0blex.cc
@@ -127,6 +131,7 @@ SET(INNOBASE_SOURCES
 	sync/sync0rw.cc
 	sync/sync0debug.cc
 	sync/sync0sync.cc
+	tp/threadpool_generic.cc
 	trx/trx0i_s.cc
 	trx/trx0purge.cc
 	trx/trx0rec.cc
@@ -146,6 +151,12 @@ SET(INNOBASE_SOURCES
 	ut/ut0vec.cc
 	ut/ut0wqueue.cc
 	ut/ut0timer.cc)
+
+IF(WIN32)
+LIST(APPEND INNOBASE_SOURCES
+	aio/aio_win.cc
+	tp/threadpool_win.cc)
+ENDIF()
 
 MYSQL_ADD_PLUGIN(innobase ${INNOBASE_SOURCES} STORAGE_ENGINE
   MODULE_OUTPUT_NAME ha_innodb
