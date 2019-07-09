@@ -113,9 +113,8 @@ SET(ROCKSDB_SE_SOURCES
 #ADD_DEFINITIONS(-DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX
 #)
 
-MYSQL_ADD_PLUGIN(rocksdb ${ROCKSDB_SE_SOURCES} MODULE_ONLY STORAGE_ENGINE
-                 MODULE_OUTPUT_NAME ha_rocksdb
-                 COMPONENT rocksdb-engine)
+MYSQL_ADD_PLUGIN(rocksdb ${ROCKSDB_SE_SOURCES} MODULE_ONLY
+                 MODULE_OUTPUT_NAME ha_rocksdb COMPONENT rocksdb-engine)
 
 IF(NOT TARGET rocksdb)
   # Bail out if compilation with rocksdb engine is not requested

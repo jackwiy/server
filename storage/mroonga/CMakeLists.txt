@@ -313,7 +313,7 @@ set(MRN_ALL_SOURCES
 if(MRN_BUNDLED)
   mysql_add_plugin(mroonga
     ${MRN_ALL_SOURCES}
-    STORAGE_ENGINE MODULE_ONLY
+    MODULE_ONLY
     LINK_LIBRARIES ${MRN_LIBRARIES})
   if(NOT TARGET mroonga)
     return()
