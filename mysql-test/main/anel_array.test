@@ -1,9 +1,4 @@
 let $datadir=`select @@datadir`;
-
---echo #
---echo # Array test with JSONB_TYPE_LARGE_OBJECT 
---echo #
-
 call mtr.add_suppression("Table './test/mysql_json_array_long' is marked as crashed and should be repaired");
 call mtr.add_suppression("Checking table:   './test/mysql_json_array_long'");
 
@@ -12,6 +7,23 @@ call mtr.add_suppression("Checking table:   './test/mysql_json_array'");
 
 call mtr.add_suppression("Table './test/mysql_json' is marked as crashed and should be repaired");
 call mtr.add_suppression("Checking table:   './test/mysql_json'");
+
+--echo #
+--echo # Array test with json object
+--echo #
+
+# Make sure you have placed `json.[frm/myd/myi]` files in `source/mysql-test/std_data/`
+--copy_file std_data/simple_array_table_json_object.frm $datadir/test/mysql_json.frm
+--copy_file std_data/simple_array_table_json_object.MYI $datadir/test/mysql_json.MYI
+--copy_file std_data/simple_array_table_json_object.MYD $datadir/test/mysql_json.MYD
+
+# Now can read 
+select * from test.mysql_json;
+drop table test.mysql_json;
+
+--echo #
+--echo # Array test with JSONB_TYPE_LARGE_OBJECT 
+--echo #
 
 # Make sure you have placed `json.[frm/myd/myi]` files in `source/mysql-test/std_data/`
 --copy_file std_data/long_string_JSONB_TYPE_LARGE_OBJECT.frm $datadir/test/mysql_json_array_long.frm
@@ -36,16 +48,14 @@ select * from test.mysql_json_array;
 drop table test.mysql_json_array;
 
 --echo #
---echo # Array test with json object
+--echo # Array test with JSONB_TYPE_LARGE_ARRAY
 --echo #
 
-
-
 # Make sure you have placed `json.[frm/myd/myi]` files in `source/mysql-test/std_data/`
---copy_file std_data/simple_array_table_json_object.frm $datadir/test/mysql_json.frm
---copy_file std_data/simple_array_table_json_object.MYI $datadir/test/mysql_json.MYI
---copy_file std_data/simple_array_table_json_object.MYD $datadir/test/mysql_json.MYD
+--copy_file std_data/bigarray.frm $datadir/test/mysql_json_array.frm
+--copy_file std_data/bigarray.MYI $datadir/test/mysql_json_array.MYI
+--copy_file std_data/bigarray.MYD $datadir/test/mysql_json_array.MYD
 
 # Now can read 
-select * from test.mysql_json;
-drop table test.mysql_json;
+select * from test.mysql_json_array;
+drop table test.mysql_json_array;

@@ -1,6 +1,19 @@
 let $datadir=`select @@datadir`;
 drop table if exists mysql_json; 
 
+
+--echo # 
+--echo # Test opaque data types
+--echo #
+
+--copy_file std_data/tests_json.frm $datadir/test/mysql_json.frm
+--copy_file std_data/tests_json.MYI $datadir/test/mysql_json.MYI
+--copy_file std_data/tests_json.MYD $datadir/test/mysql_json.MYD
+
+
+select * from test.mysql_json;
+drop table mysql_json;
+
 --echo #
 --echo # auto convert utf8mb4
 --echo #
@@ -9,6 +22,18 @@ call mtr.add_suppression("Checking table:   './test/mysql_json'");
 --copy_file std_data/encode64.frm $datadir/test/mysql_json.frm
 --copy_file std_data/encode64.MYI $datadir/test/mysql_json.MYI
 --copy_file std_data/encode64.MYD $datadir/test/mysql_json.MYD
+
+
+select * from test.mysql_json;
+drop table mysql_json;
+
+--echo # 
+--echo # Test utf8 characters
+--echo #
+
+--copy_file std_data/testjson.frm $datadir/test/mysql_json.frm
+--copy_file std_data/testjson.MYI $datadir/test/mysql_json.MYI
+--copy_file std_data/testjson.MYD $datadir/test/mysql_json.MYD
 
 
 select * from test.mysql_json;

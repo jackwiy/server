@@ -11188,18 +11188,6 @@ uint32 Field_blob::max_display_length() const
 bool Field_mysql_json::parse_mysql(String *s, bool json_quoted,
                                    const char *func_name) const
 {
-  // This code is part of mysql code val_json(wrapper)
-  /*
-    The empty string is not a valid JSON binary representation, so we
-    should have returned an error. However, sometimes an empty
-    Field_json object is created in order to retrieve meta-data.
-    Return a dummy value instead of raising an error. Bug#21104470.
-    The field could also contain an empty string after forcing NULL or
-    DEFAULT into a not nullable JSON column using lax error checking
-    (such as INSERT IGNORE or non-strict SQL mode). The JSON null
-    literal is used to represent the empty value in this case.
-    Bug#21437989.
-  */
   const char *data= s->ptr();
   size_t length= s->length();
 
@@ -11207,27 +11195,25 @@ bool Field_mysql_json::parse_mysql(String *s, bool json_quoted,
   s->length(0);
   if (length == 0)
   {
-    //@todo anel will need to see how to handle this
-    //Json_wrapper w(new (std::nothrow) Json_null());
-    //wr->steal(&w);
+    // There are no data.
     return false;
   }
 
   // Each document should start with a one-byte type specifier.
   if (length < 1)
-    return 1; //err();                             /* purecov: inspected */
-
-  // anel Parse JSON value => part of parse_value()
-
-  size_t type= data[0];
-
-  const char* data1=data+1;
-  size_t len=length-1;
-
-  if(parse_value(s, type, data1, len, false, 0))
-  {
     return true;
-  }
+  
+  // First byte is type, starting from second byte, raw data are considered for 
+  // obtaining the header and key/value vectors.
+  size_t type= data[0];
+  const char* data1= data + 1;
+  size_t len= length - 1;
+
+  // The fifth argument represents `large` parameter and since it is validated
+  // according to the `type` in parse_value() false value is not important here.
+  if(parse_value(s, type, data1, len, false, 0))
+    return true;
+
   return false;
 }
 
@@ -11235,10 +11221,8 @@ bool Field_mysql_json::parse_mysql(String *s, bool json_quoted,
 {
   ASSERT_COLUMN_MARKED_FOR_READ;
   String *buf1= Field_blob::val_str(buf1_tmp, buf2);
-  bool parsed= this->parse_mysql(buf1, true, field_name.str);
-   if(!parsed)
-    buf1->append("\nFinshed");
-  else
+
+  if (this->parse_mysql(buf1, true, field_name.str))
     buf1->length(0);
   return buf1;
 }

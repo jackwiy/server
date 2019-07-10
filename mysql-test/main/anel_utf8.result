@@ -1,6 +1,31 @@
 drop table if exists mysql_json;
 Warnings:
 Note	1051	Unknown table 'test.mysql_json'
+# 
+# Test opaque data types
+#
+select * from test.mysql_json;
+c	i
+opaque_mysql_type_set	"b,c"
+opaque_mysql_type_enum	"b"
+opaque_mysql_type_date	2015-01-15
+opaque_mysql_type_time	23:24:25.000000
+opaque_mysql_type_datetime	2015-01-15 23:24:25.000000
+opaque_mysql_type_geom	{"type":"Point","coordinates":[1,1]}
+opaque_mysql_type_bit	"base64:type:yv4="
+opaque_mysql_type_year	"base64:type:MjAxOQ=="
+opaque_mysql_type_blob	"base64:type:yv66vg=="
+opaque_mysql_type_longblob	"base64:type:yv66vg=="
+opaque_mysql_type_mediumblob	"base64:type:yv66vg=="
+opaque_mysql_type_tinyblob	"base64:type:yv66vg=="
+opaque_mysql_type_varbinary	NULL
+opaque_mysql_type_binary	NULL
+opaque_mysql_type_varchar	"base64:type:Zm9v"
+opaque_mysql_type_string	NULL
+Warnings:
+Error	145	Table './test/mysql_json' is marked as crashed and should be repaired
+Error	1034	1 client is using or hasn't closed the table properly
+drop table mysql_json;
 #
 # auto convert utf8mb4
 #
@@ -9,11 +34,18 @@ call mtr.add_suppression("Checking table:   './test/mysql_json'");
 select * from test.mysql_json;
 t
 []
-Finshed
-base64:type:yv4=
-Finshed
-base64:type:yv66vg==
-Finshed
+"base64:type:yv4="
+"base64:type:yv66vg=="
+Warnings:
+Error	145	Table './test/mysql_json' is marked as crashed and should be repaired
+Error	1034	1 client is using or hasn't closed the table properly
+drop table mysql_json;
+# 
+# Test utf8 characters
+#
+select * from test.mysql_json;
+i
+"Anel Husaković - test: đžšćč"
 Warnings:
 Error	145	Table './test/mysql_json' is marked as crashed and should be repaired
 Error	1034	1 client is using or hasn't closed the table properly

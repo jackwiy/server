@@ -11,77 +11,41 @@ Note	1051	Unknown table 'test.mysql_json'
 select * from test.mysql_json;
 c1
 {"key1":"value_1","key256":"value_256"}
-Finshed
 ["val3","val4"]
-Finshed
 ["val5",{"key3":"val6","key4":"val7"}]
-Finshed
 {"neg":-10}
-Finshed
 {"neg":-1234567890,"pos":9876543210}
-Finshed
 {"a":[1,2],"b":["x","y"]}
-Finshed
 0
-Finshed
 -127
-Finshed
 128
-Finshed
 32767
-Finshed
 -32768
-Finshed
 65535
-Finshed
 65536
-Finshed
 -2147483648
-Finshed
 2147483647
-Finshed
 4294967295
-Finshed
 -9223372036854775807
-Finshed
 9223372036854775807
-Finshed
 18446744073709551615
-Finshed
 -3.14
-Finshed
 151.23
-Finshed
 "scalar_string"
-Finshed
 true
-Finshed
 false
-Finshed
 null
-Finshed
 "literals"
-Finshed
 1.8446744073709552e19
-Finshed
 {}
-Finshed
 []
-Finshed
 2015-01-15 23:24:25.000000
-Finshed
 23:24:25.000000
-Finshed
 2015-01-15
-Finshed
 {"type":"Point","coordinates":[1,1]}
-Finshed
 2015-01-15 23:24:25.000000
-Finshed
 []
-Finshed
-base64:type:yv4=
-Finshed
+"base64:type:yv4="
 drop table mysql_json;
 #
 # String value
@@ -89,7 +53,6 @@ drop table mysql_json;
 select * from test.mysql_json;
 t
 {"key1":"val1","key2":"val2"}
-Finshed
 drop table mysql_json;
 #
 # Negative value
@@ -97,7 +60,6 @@ drop table mysql_json;
 select * from test.mysql_json;
 t
 {"neg":-10}
-Finshed
 drop table mysql_json;
 #
 # Mix of INT32 and UINT64
@@ -105,5 +67,4 @@ drop table mysql_json;
 select * from test.mysql_json;
 t
 {"neg":-1234567890,"pos":9876543210}
-Finshed
 drop table mysql_json;

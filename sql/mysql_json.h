@@ -8,7 +8,6 @@
 #include "mysql_com.h"
 #include "mysqld_error.h"
 
-// defines of mysql @todo anel put in single file
 #define JSONB_TYPE_SMALL_OBJECT   0x0
 #define JSONB_TYPE_LARGE_OBJECT   0x1
 #define JSONB_TYPE_SMALL_ARRAY    0x2
@@ -56,7 +55,6 @@
 #define JSON_DOCUMENT_MAX_DEPTH 100
 
 /*
- @todo anel enums used in json_dom 
     Json values in MySQL comprises the stand set of JSON values plus a
     MySQL specific set. A Json _number_ type is subdivided into _int_,
     _uint_, _double_ and _decimal_.
@@ -128,7 +126,7 @@ enum enum_json_type {
   J_ERROR
 };
 
-  /**
+/*
   Extended type ids so that JSON_TYPE() can give useful type
   names to certain sub-types of J_OPAQUE.
 */
@@ -138,15 +136,14 @@ enum enum_json_opaque_type {
   J_OPAQUE_GEOMETRY
 };
 
-// Prototypes
+
 size_t read_offset_or_size(const char *, bool);
-bool get_mysql_string(String *buffer, size_t type, const char *data, size_t len, bool large);
-bool parse_value(String *buffer, size_t type, const char *data, size_t len, bool large, size_t depth);
+bool get_mysql_string(String *buffer, size_t type, const char *data, size_t len,
+                      bool large);
+bool parse_value(String *buffer, size_t type, const char *data, size_t len,
+                 bool large, size_t depth);
 bool parse_array_or_object(String * buffer, Field_mysql_json::enum_type,
-                           const char *,size_t , bool);
+                           const char *, size_t, bool);
 bool parse_mysql_scalar(String* buffer, size_t type,
                         const char *data, size_t len, bool large, size_t depth);
-
-// static bool read_variable_length(const char *data, size_t data_length,
-//                                  size_t *length, size_t *num)
 #endif  /* MYSQL_JSON_INCLUDED */ 
