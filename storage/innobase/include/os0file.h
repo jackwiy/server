@@ -1396,6 +1396,12 @@ Frees the asynchronous io system. */
 void
 os_aio_free();
 
+struct os_aio_userdata_t
+{
+	fil_node_t* node;
+	IORequest	type;
+	void* message;
+};
 /**
 NOTE! Use the corresponding macro os_aio(), not directly this function!
 Requests an asynchronous i/o operation.
@@ -1428,47 +1434,12 @@ os_aio_func(
 	fil_node_t*	m1,
 	void*		m2);
 
-/** Wakes up all async i/o threads so that they know to exit themselves in
-shutdown. */
-void
-os_aio_wake_all_threads_at_shutdown();
 
 /** Waits until there are no pending writes in os_aio_write_array. There can
 be other, synchronous, pending writes. */
 void
 os_aio_wait_until_no_pending_writes();
 
-/** Wakes up simulated aio i/o-handler threads if they have something to do. */
-void
-os_aio_simulated_wake_handler_threads();
-
-/** This is the generic AIO handler interface function.
-Waits for an aio operation to complete. This function is used to wait the
-for completed requests. The AIO array of pending requests is divided
-into segments. The thread specifies which segment or slot it wants to wait
-for. NOTE: this function will also take care of freeing the aio slot,
-therefore no other thread is allowed to do the freeing!
-@param[in]	segment		the number of the segment in the aio arrays to
-				wait for; segment 0 is the ibuf I/O thread,
-				segment 1 the log I/O thread, then follow the
-				non-ibuf read threads, and as the last are the
-				non-ibuf write threads; if this is
-				ULINT_UNDEFINED, then it means that sync AIO
-				is used, and this parameter is ignored
-@param[out]	m1		the messages passed with the AIO request;
-				note that also in the case where the AIO
-				operation failed, these output parameters
-				are valid and can be used to restart the
-				operation, for example
-@param[out]	m2		callback message
-@param[out]	type		OS_FILE_WRITE or ..._READ
-@return DB_SUCCESS or error code */
-dberr_t
-os_aio_handler(
-	ulint		segment,
-	fil_node_t**	m1,
-	void**		m2,
-	IORequest*	type);
 
 /** Prints info of the aio arrays.
 @param[in/out]	file		file where to print */
@@ -1484,14 +1455,6 @@ no pending io operations. */
 bool
 os_aio_all_slots_free();
 
-#ifdef UNIV_DEBUG
-
-/** Prints all pending IO
-@param[in]	file	file where to print */
-void
-os_aio_print_pending_io(FILE* file);
-
-#endif /* UNIV_DEBUG */
 
 /** This function returns information about the specified file
 @param[in]	path		pathname of the file

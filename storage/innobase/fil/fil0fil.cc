@@ -953,7 +953,6 @@ fil_mutex_enter_and_prepare_for_io(
 					break;
 				} else {
 					mutex_exit(&fil_system.mutex);
-					os_aio_simulated_wake_handler_threads();
 					os_thread_sleep(20000);
 					/* Flush tablespaces so that we can
 					close modified files in the LRU list */
@@ -4324,24 +4323,27 @@ fil_io(
 	return(err);
 }
 
+#include <aio0aio.h>
+
 /**********************************************************************//**
-Waits for an aio operation to complete. This function is used to write the
-handler for completed requests. The aio array of pending requests is divided
-into segments (see os0file.cc for more info). The thread specifies which
-segment it wants to wait for. */
+
+/* Callback for AIO completion */
 void
-fil_aio_wait(
-/*=========*/
-	ulint	segment)	/*!< in: the number of the segment in the aio
-				array to wait for */
+fil_aio_callback(native_file_handle fh,
+	aio_opcode opcode,
+	unsigned long long offset,
+	void* buffer,
+	unsigned int len,
+	int ret_len,
+	int err,
+	void* userdata)
 {
-	fil_node_t*	node;
-	IORequest	type;
-	void*		message;
+	os_aio_userdata_t *data=(os_aio_userdata_t *)userdata;
+	fil_node_t* node= data->node;
+	IORequest	type = data->type;
+	void* message = data->message;
 
 	ut_ad(fil_validate_skip());
-
-	dberr_t	err = os_aio_handler(segment, &node, &message, &type);
 
 	ut_a(err == DB_SUCCESS);
 
@@ -4349,8 +4351,6 @@ fil_aio_wait(
 		ut_ad(srv_shutdown_state == SRV_SHUTDOWN_EXIT_THREADS);
 		return;
 	}
-
-	srv_set_io_thread_op_info(segment, "complete io for fil node");
 
 	mutex_enter(&fil_system.mutex);
 
@@ -4371,7 +4371,6 @@ fil_aio_wait(
 
 	switch (purpose) {
 	case FIL_TYPE_LOG:
-		srv_set_io_thread_op_info(segment, "complete io for log");
 		/* We use synchronous writing of the logs
 		and can only end up here when writing a log checkpoint! */
 		ut_a(ptrdiff_t(message) == 1);
@@ -4396,7 +4395,6 @@ fil_aio_wait(
 	case FIL_TYPE_TABLESPACE:
 	case FIL_TYPE_TEMPORARY:
 	case FIL_TYPE_IMPORT:
-		srv_set_io_thread_op_info(segment, "complete io for buf page");
 
 		/* async single page writes from the dblwr buffer don't have
 		access to the page */

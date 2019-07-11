@@ -364,11 +364,6 @@ read_ahead:
 		}
 	}
 
-	/* In simulated aio we wake the aio handler threads only after
-	queuing all aio requests, in native aio the following call does
-	nothing: */
-
-	os_aio_simulated_wake_handler_threads();
 
 	if (count) {
 		DBUG_PRINT("ib_buf", ("random read-ahead %u pages, %u:%u",
@@ -732,12 +727,6 @@ buf_read_ahead_linear(const page_id_t page_id, ulint zip_size, bool ibuf)
 		}
 	}
 
-	/* In simulated aio we wake the aio handler threads only after
-	queuing all aio requests, in native aio the following call does
-	nothing: */
-
-	os_aio_simulated_wake_handler_threads();
-
 	if (count) {
 		DBUG_PRINT("ib_buf", ("linear read-ahead " ULINTPF " pages, "
 				      "%u:%u",
@@ -828,8 +817,6 @@ tablespace_deleted:
 		}
 	}
 
-	os_aio_simulated_wake_handler_threads();
-
 	if (n_stored) {
 		DBUG_PRINT("ib_buf",
 			   ("ibuf merge read-ahead %u pages, space %u",
@@ -871,7 +858,6 @@ buf_read_recv_pages(
 		buf_pool = buf_pool_get(cur_page_id);
 		while (buf_pool->n_pend_reads >= recv_n_pool_free_frames / 2) {
 
-			os_aio_simulated_wake_handler_threads();
 			os_thread_sleep(10000);
 
 			count++;
@@ -907,8 +893,6 @@ buf_read_recv_pages(
 				<< cur_page_id;
 		}
 	}
-
-	os_aio_simulated_wake_handler_threads();
 
 	DBUG_PRINT("ib_buf", ("recovery read-ahead (%u pages)",
 			      unsigned(n_stored)));

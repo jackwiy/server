@@ -1098,9 +1098,7 @@ buf_flush_write_block_low(
 
 /********************************************************************//**
 Writes a flushable page asynchronously from the buffer pool to a file.
-NOTE: in simulated aio we must call
-os_aio_simulated_wake_handler_threads after we have posted a batch of
-writes! NOTE: buf_pool->mutex and buf_page_get_mutex(bpage) must be
+NOTE: buf_pool->mutex and buf_page_get_mutex(bpage) must be
 held upon entering this function, and they will be released by this
 function if it returns true.
 @return TRUE if the page was flushed */
@@ -1929,8 +1927,6 @@ buf_flush_end(
 
 	if (!srv_read_only_mode) {
 		buf_dblwr_flush_buffered_writes();
-	} else {
-		os_aio_simulated_wake_handler_threads();
 	}
 }
 

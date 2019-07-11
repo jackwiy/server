@@ -10,13 +10,13 @@ class win_aio;
 struct OVERLAPPED_EXTENDED: OVERLAPPED
 {
   HANDLE fd;
-  void* userdata;
   void* buffer;
   win_aio* aio;
   unsigned int len;
   unsigned int bytes_transferred;
   int err;
   enum aio_opcode opcode;
+  char userdata[MAX_AIO_USERDATA_LEN];
 };
 
 struct OVERLAPPED_SLIST_ENTRY: SLIST_ENTRY
@@ -75,6 +75,7 @@ class win_aio:public aio
   HANDLE m_io_completion_thread;
   threadpool::threadpool *m_pool;
 
+
 public:
   win_aio(threadpool::threadpool *pool):m_pool(pool),m_completion_port(),m_overlapped_cache()
   {
@@ -92,7 +93,8 @@ public:
       if (!GetOverlappedResult(ov.fd, &ov, (DWORD*) & (ov.bytes_transferred), FALSE))
         err = GetLastError();
     }
-    ov.aio->m_callback(ov.fd, ov.opcode, (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset , ov.buffer, ov.len, ov.bytes_transferred, err, ov.userdata);
+    ov.aio->execute_callback(ov.fd, ov.opcode, (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset , ov.buffer, ov.len, ov.bytes_transferred, err, ov.userdata);
+
   }
   static DWORD WINAPI io_completion_routine(void* par)
   {
@@ -123,11 +125,11 @@ public:
       return -1;
     return 0;
   }
-  virtual int submit(native_file_handle fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata) override
+  virtual int submit(native_file_handle fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
   {
     OVERLAPPED_EXTENDED* ov = m_overlapped_cache.get();
     ov->fd = fd;
-    ov->userdata = userdata;
+    memcpy(ov->userdata,userdata, userdata_len);
     ov->Offset = (DWORD)offset;
     ov->OffsetHigh = (DWORD)(offset >> 32);
     ov->len = len;

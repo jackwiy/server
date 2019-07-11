@@ -62,6 +62,7 @@ SET(INNOBASE_SOURCES
 	ha/ha0storage.cc
 	ha/hash0hash.cc
 	include/aio0aio.h
+	include/os0file.h
 	include/tp0tp.h
 	fts/fts0fts.cc
 	fts/fts0ast.cc

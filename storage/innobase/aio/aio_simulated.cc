@@ -3,6 +3,7 @@
 #ifndef _WIN32
 #include <unistd.h> /* pread(), pwrite() */
 #endif
+#include <string.h>
 class simulated_aio;
 
 struct simulated_iocb
@@ -13,8 +14,8 @@ struct simulated_iocb
   unsigned long long offset;
   void* buffer;
   unsigned int len;
-  void* userdata;
   simulated_aio *aio;
+  char userdata[MAX_AIO_USERDATA_LEN];
 };
 
 struct simulated_iocb_cache
@@ -149,10 +150,10 @@ public:
       err = errno;
 #endif  
     }
-    aio->m_callback(iocb.fd, iocb.opcode,iocb.offset, iocb.buffer, iocb.len,ret_len, err, iocb.userdata);
+    aio->execute_callback(iocb.fd, iocb.opcode,iocb.offset, iocb.buffer, iocb.len,ret_len, err, iocb.userdata);
   }
 
-  virtual int submit(native_file_handle fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata) override
+  virtual int submit(native_file_handle fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
   {
     simulated_iocb *iocb= m_iocb_cache.get();
     iocb->aio = this;
@@ -161,7 +162,7 @@ public:
     iocb->len = len;
     iocb->offset = offset;
     iocb->opcode = opcode;
-    iocb->userdata = userdata;
+    memcpy(iocb->userdata,userdata, userdata_len);
     threadpool::task t{execute_io_completion, iocb};
     m_tp->submit(t);
     return 0;

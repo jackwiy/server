@@ -99,10 +99,6 @@ void
 buf_dblwr_sync_datafiles()
 /*======================*/
 {
-	/* Wake possible simulated aio thread to actually post the
-	writes to the operating system */
-	os_aio_simulated_wake_handler_threads();
-
 	/* Wait that all async writes to tablespaces have been posted to
 	the OS */
 	os_aio_wait_until_no_pending_writes();
@@ -974,13 +970,6 @@ try_again:
 	if (buf_dblwr->first_free == 0) {
 
 		mutex_exit(&buf_dblwr->mutex);
-
-		/* Wake possible simulated aio thread as there could be
-		system temporary tablespace pages active for flushing.
-		Note: system temporary tablespace pages are not scheduled
-		for doublewrite. */
-		os_aio_simulated_wake_handler_threads();
-
 		return;
 	}
 
@@ -1082,12 +1071,6 @@ flush:
 		buf_dblwr_write_block_to_datafile(
 			buf_dblwr->buf_block_arr[i], false);
 	}
-
-	/* Wake possible simulated aio thread to actually post the
-	writes to the operating system. We don't flush the files
-	at this point. We leave it to the IO helper thread to flush
-	datafiles when the whole batch has been processed. */
-	os_aio_simulated_wake_handler_threads();
 }
 
 /********************************************************************//**
