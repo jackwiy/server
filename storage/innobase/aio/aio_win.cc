@@ -7,11 +7,13 @@
 
 class win_aio;
 
+class win_aio_generic;
+
 struct OVERLAPPED_EXTENDED: OVERLAPPED
 {
   HANDLE fd;
   void* buffer;
-  win_aio* aio;
+  void* aio;
   unsigned int len;
   unsigned int bytes_transferred;
   int err;
@@ -68,16 +70,14 @@ struct overlapped_cache
 };
 
 
-class win_aio:public aio
+class win_aio_generic:public aio
 {
   HANDLE m_completion_port;
   overlapped_cache m_overlapped_cache;
   HANDLE m_io_completion_thread;
   threadpool::threadpool *m_pool;
-
-
 public:
-  win_aio(threadpool::threadpool *pool):m_pool(pool),m_completion_port(),m_overlapped_cache()
+  win_aio_generic(threadpool::threadpool *pool):m_pool(pool),m_completion_port(),m_overlapped_cache()
   {
     m_completion_port = CreateIoCompletionPort(INVALID_HANDLE_VALUE,0,0,0);
     DWORD tid;
@@ -86,21 +86,22 @@ public:
   static void CALLBACK execute_io_completion(PTP_CALLBACK_INSTANCE, void* param)
   {
     OVERLAPPED_EXTENDED ov = *(OVERLAPPED_EXTENDED*)param;
-    ov.aio->m_overlapped_cache.put((OVERLAPPED_EXTENDED*)param);
+    win_aio_generic *aio=(win_aio_generic*)ov.aio;
+    aio->m_overlapped_cache.put((OVERLAPPED_EXTENDED*)param);
     int err = 0;
     if (ov.len != ov.bytes_transferred)
     {
       if (!GetOverlappedResult(ov.fd, &ov, (DWORD*) & (ov.bytes_transferred), FALSE))
         err = GetLastError();
     }
-    ov.aio->execute_callback(ov.fd, ov.opcode, (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset , ov.buffer, ov.len, ov.bytes_transferred, err, ov.userdata);
+    aio->execute_callback(ov.fd, ov.opcode, (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset , ov.buffer, ov.len, ov.bytes_transferred, err, ov.userdata);
 
   }
   static DWORD WINAPI io_completion_routine(void* par)
   {
     OVERLAPPED_ENTRY arr[64];
     ULONG count;
-    win_aio* aio = (win_aio*)par;
+    win_aio_generic* aio = (win_aio_generic*)par;
 
     while (GetQueuedCompletionStatusEx(aio->m_completion_port, arr, 64, &count, INFINITE, FALSE))
     {
@@ -118,14 +119,14 @@ public:
     return 0;
   }
   // Inherited via aio
-  virtual int bind(native_file_handle fd) override
+  virtual int bind(native_file_handle& fd) override
   {
     HANDLE h = CreateIoCompletionPort(fd, m_completion_port, 0, 0);
     if (h == INVALID_HANDLE_VALUE || !h)
       return -1;
     return 0;
   }
-  virtual int submit(native_file_handle fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
+  virtual int submit(const native_file_handle& fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
   {
     OVERLAPPED_EXTENDED* ov = m_overlapped_cache.get();
     ov->fd = fd;
@@ -153,14 +154,83 @@ public:
     return -1;
   }
 
-  ~win_aio()
+  ~win_aio_generic()
   {
     CloseHandle(m_completion_port);
     WaitForSingleObject(m_io_completion_thread, INFINITE);
   }
 };
 
+class win_aio_native_tp :public aio
+{
+  overlapped_cache m_overlapped_cache;
+  PTP_CALLBACK_ENVIRON m_env;
+public:
+  win_aio_native_tp(threadpool::threadpool* pool) : m_overlapped_cache()
+  {
+    m_env = (PTP_CALLBACK_ENVIRON) pool->get_native_env();
+  }
+ 
+  static void CALLBACK io_completion_callback(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PVOID Overlapped, ULONG  IoResult, ULONG_PTR  NumberOfBytesTransferred, PTP_IO  io)
+  {
+    OVERLAPPED_EXTENDED ov = *(OVERLAPPED_EXTENDED*)Overlapped;
+    win_aio_native_tp *aio = (win_aio_native_tp * )ov.aio;
+    aio->m_overlapped_cache.put((OVERLAPPED_EXTENDED*)Overlapped);
+    aio->execute_callback(ov.fd, ov.opcode, (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset, ov.buffer, ov.len, (int)NumberOfBytesTransferred, (int)IoResult, ov.userdata);
+  }
+  
+  virtual int bind(native_file_handle& fd) override
+  {
+    fd.m_ptp_io = CreateThreadpoolIo(fd.m_handle, io_completion_callback, 0, m_env);
+    return fd.m_ptp_io ? 0 : -1;
+  }
+
+  virtual void unbind(const native_file_handle& fd) override
+  {
+    if (fd.m_ptp_io)
+    {
+      CloseThreadpoolIo(fd.m_ptp_io);
+    }
+  }
+  virtual int submit(const native_file_handle& fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
+  {
+    OVERLAPPED_EXTENDED* ov = m_overlapped_cache.get();
+    ov->fd = fd;
+    memcpy(ov->userdata, userdata, userdata_len);
+    ov->Offset = (DWORD)offset;
+    ov->OffsetHigh = (DWORD)(offset >> 32);
+    ov->len = len;
+    ov->buffer = buffer;
+    ov->opcode = opcode;
+    ov->aio = this;
+    BOOL ret;
+    StartThreadpoolIo(fd.m_ptp_io);
+    switch (opcode)
+    {
+    case AIO_PREAD:
+      ret = ReadFile(fd, buffer, len, nullptr, ov);
+      break;
+    case AIO_PWRITE:
+      ret = WriteFile(fd, buffer, len, nullptr, ov);
+      break;
+    default:
+      abort();
+    }
+    if (ret || GetLastError() == ERROR_IO_PENDING)
+      return 0;
+    CancelThreadpoolIo(fd.m_ptp_io);
+    return -1;
+  }
+
+  ~win_aio_native_tp()
+  {
+  }
+};
+
+
 aio* create_win_aio(threadpool::threadpool* tp)
 {
-  return new win_aio(tp);
+  if (tp->is_native())
+    return new win_aio_native_tp(tp);
+  return new win_aio_generic(tp);
 }

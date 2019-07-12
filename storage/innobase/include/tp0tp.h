@@ -24,6 +24,9 @@ namespace threadpool
     virtual void submit(const task* tasks, int size) = 0;
     void submit(const task& t) { submit(&t,1); }
     virtual void shutdown() = 0;
+    /* Following functions are there just for the Windows native threadpool.*/
+    virtual bool is_native() { return false; }
+    virtual void* get_native_env() { return 0; }
     virtual ~threadpool(){}
   };
 

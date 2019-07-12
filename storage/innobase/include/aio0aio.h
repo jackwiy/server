@@ -1,7 +1,15 @@
 #pragma once
 #ifdef _WIN32
 #include <windows.h>
-typedef HANDLE native_file_handle;
+struct native_file_handle
+{
+public:
+  HANDLE  m_handle;
+  PTP_IO  m_ptp_io;
+  native_file_handle(){};
+  native_file_handle(HANDLE h):m_handle(h),m_ptp_io(){}
+  operator HANDLE() const {return m_handle;}
+};
 #else
 #include <unistd.h>
 typedef int native_file_handle;
@@ -48,17 +56,18 @@ protected:
   aio() :m_callback(), m_pending_reads(), m_pending_writes()
   {
   }
-  void execute_callback( native_file_handle fh, aio_opcode opcode,  unsigned long long offset, void* buffer, unsigned int len,
+  void execute_callback(const native_file_handle& fh, aio_opcode opcode,  unsigned long long offset, void* buffer, unsigned int len,
         int ret_len,  int err,  void* userdata )
   {
     m_callback(fh,opcode,offset,buffer, len, ret_len, err, userdata);
     add_pending_counter(opcode, -1);
   }
-  virtual int submit(native_file_handle fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) = 0;
+  virtual int submit(const native_file_handle& fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) = 0;
 public:
   void set_callback(aio_callback_func callback) { m_callback = callback;}
-  virtual int bind(native_file_handle fd) = 0;
-  int submit_io(native_file_handle fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len)
+  virtual int bind(native_file_handle& fd) { return 0;};
+  virtual void unbind(const native_file_handle &fd) {}
+  int submit_io(const native_file_handle& fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len)
   {
     add_pending_counter(opcode, 1);
     int ret = submit(fd,opcode, offset, buffer, len, userdata, userdata_len);

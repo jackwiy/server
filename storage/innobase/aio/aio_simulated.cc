@@ -76,7 +76,7 @@ struct sync_io_event
 };
 static thread_local sync_io_event sync_event;
 #
-static int pread(native_file_handle h, void* buf, size_t count, unsigned long long offset)
+static int pread(const native_file_handle& h, void* buf, size_t count, unsigned long long offset)
 {
   OVERLAPPED ov{};
   ULARGE_INTEGER uli;
@@ -93,7 +93,7 @@ static int pread(native_file_handle h, void* buf, size_t count, unsigned long lo
   return -1;
 }
 
-static int pwrite(native_file_handle h, void* buf, size_t count, unsigned long long offset)
+static int pwrite(const native_file_handle& h, void* buf, size_t count, unsigned long long offset)
 {
   OVERLAPPED ov{};
   ULARGE_INTEGER uli;
@@ -119,11 +119,7 @@ public:
   simulated_aio(threadpool::threadpool* tp):m_tp(tp),m_iocb_cache()
   {
   }
-  // Inherited via aio
-  virtual int bind(native_file_handle fd) override
-  {
-    return 0;
-  }
+ 
   static void CALLBACK execute_io_completion(PTP_CALLBACK_INSTANCE, void* param)
   {
     simulated_iocb iocb= *(simulated_iocb *)param;
@@ -153,7 +149,7 @@ public:
     aio->execute_callback(iocb.fd, iocb.opcode,iocb.offset, iocb.buffer, iocb.len,ret_len, err, iocb.userdata);
   }
 
-  virtual int submit(native_file_handle fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
+  virtual int submit(const native_file_handle& fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
   {
     simulated_iocb *iocb= m_iocb_cache.get();
     iocb->aio = this;

@@ -55,7 +55,7 @@ extern bool	os_has_said_disk_full;
 typedef ib_uint64_t os_offset_t;
 
 #ifdef _WIN32
-
+#include <aio0aio.h>
 typedef HANDLE	os_file_dir_t;	/*!< directory stream */
 
 /** We define always WIN_ASYNC_IO, and check at run-time whether
@@ -66,7 +66,7 @@ the OS actually supports it: Win 95 does not, NT does. */
 # define UNIV_NON_BUFFERED_IO
 
 /** File handle */
-typedef HANDLE os_file_t;
+typedef native_file_handle os_file_t;
 
 
 #else /* _WIN32 */
@@ -102,6 +102,14 @@ struct pfs_os_file_t
 	/** Assignment operator.
 	@param[in]	file	file handle to be assigned */
 	void operator=(os_file_t file) { m_file = file; }
+	bool operator==(const os_file_t& file) const { return m_file == file; }
+	bool operator!=(const os_file_t& file) const { return !(*this == file); }
+#ifndef DBUG_OFF
+	friend std::ostream& operator<<(std::ostream& os, const pfs_os_file_t& f){
+		os << os_file_t(f);
+		return os;
+	}
+#endif
 };
 
 /** The next value should be smaller or equal to the smallest sector size used
@@ -412,7 +420,7 @@ public:
 	@param[in]	off		Starting offset (SEEK_SET)
 	@param[in]	len		Size of the hole
 	@return DB_SUCCESS or error code */
-	dberr_t punch_hole(os_file_t fh, os_offset_t off, ulint len);
+	dberr_t punch_hole(const os_file_t& fh, os_offset_t off, ulint len);
 
 private:
 	/** Page to be written on write operation. */
@@ -678,7 +686,7 @@ os_file_get_last_error.
 @param[in]	file		own: handle to a file
 @return true if success */
 bool
-os_file_close_func(os_file_t file);
+os_file_close_func(const os_file_t& file);
 
 #ifdef UNIV_PFS_IO
 
@@ -932,7 +940,7 @@ A performance schema instrumented wrapper function for os_file_close().
 UNIV_INLINE
 bool
 pfs_os_file_close_func(
-	pfs_os_file_t	file,
+	const pfs_os_file_t&	file,
 	const char*	src_file,
 	uint		src_line);
 
@@ -952,7 +960,7 @@ UNIV_INLINE
 dberr_t
 pfs_os_file_read_func(
 	const IORequest&	type,
-	pfs_os_file_t		file,
+	const pfs_os_file_t&		file,
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n,
@@ -977,7 +985,7 @@ UNIV_INLINE
 dberr_t
 pfs_os_file_read_no_error_handling_func(
 	const IORequest&	type,
-	pfs_os_file_t		file,
+	const pfs_os_file_t&		file,
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n,
@@ -1013,7 +1021,7 @@ pfs_os_aio_func(
 	IORequest&	type,
 	ulint		mode,
 	const char*	name,
-	pfs_os_file_t	file,
+	const pfs_os_file_t&	file,
 	void*		buf,
 	os_offset_t	offset,
 	ulint		n,
@@ -1042,7 +1050,7 @@ dberr_t
 pfs_os_file_write_func(
 	const IORequest&	type,
 	const char*		name,
-	pfs_os_file_t		file,
+	const pfs_os_file_t&		file,
 	const void*		buf,
 	os_offset_t		offset,
 	ulint			n,
@@ -1061,7 +1069,7 @@ Flushes the write buffers of a given file to the disk.
 UNIV_INLINE
 bool
 pfs_os_file_flush_func(
-	pfs_os_file_t	file,
+	const pfs_os_file_t&	file,
 	const char*	src_file,
 	uint		src_line);
 
@@ -1183,7 +1191,7 @@ os_file_get_size(
 @return file size, or (os_offset_t) -1 on failure */
 os_offset_t
 os_file_get_size(
-	os_file_t	file)
+	const os_file_t&	file)
 	MY_ATTRIBUTE((warn_unused_result));
 
 /** Extend a file.
@@ -1204,7 +1212,7 @@ of file.
 bool
 os_file_set_size(
 	const char*	name,
-	os_file_t	file,
+	const os_file_t&	file,
 	os_offset_t	size,
 	bool		is_sparse = false)
 	MY_ATTRIBUTE((warn_unused_result));
@@ -1225,7 +1233,7 @@ os_file_set_eof(
 bool
 os_file_truncate(
 	const char*	pathname,
-	os_file_t	file,
+	const os_file_t&	file,
 	os_offset_t	size,
 	bool		allow_shrink = false);
 
@@ -1236,7 +1244,7 @@ Flushes the write buffers of a given file to the disk.
 @return true if success */
 bool
 os_file_flush_func(
-	os_file_t	file);
+	const os_file_t&	file);
 
 /** Retrieves the last error number if an error occurs in a file io function.
 The number should be retrieved before any other OS calls (because they may
@@ -1261,7 +1269,7 @@ Requests a synchronous read operation.
 dberr_t
 os_file_read_func(
 	const IORequest&	type,
-	os_file_t		file,
+	const os_file_t&		file,
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n)
@@ -1293,7 +1301,7 @@ any error handling. In case of error it returns FALSE.
 dberr_t
 os_file_read_no_error_handling_func(
 	const IORequest&	type,
-	os_file_t		file,
+	const os_file_t&		file,
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n,
@@ -1313,7 +1321,7 @@ dberr_t
 os_file_write_func(
 	const IORequest&	type,
 	const char*		name,
-	os_file_t		file,
+  const os_file_t&		file,
 	const void*		buf,
 	os_offset_t		offset,
 	ulint			n)
@@ -1426,7 +1434,7 @@ os_aio_func(
 	IORequest&	type,
 	ulint		mode,
 	const char*	name,
-	pfs_os_file_t	file,
+	const pfs_os_file_t&	file,
 	void*		buf,
 	os_offset_t	offset,
 	ulint		n,
@@ -1484,7 +1492,7 @@ Make file sparse, on Windows.
 @param[in]	is_sparse if true, make file sparse,
 			otherwise "unsparse" the file
 @return true on success, false on error */
-bool os_file_set_sparse_win32(os_file_t file, bool is_sparse = true);
+bool os_file_set_sparse_win32(const os_file_t& file, bool is_sparse = true);
 
 /**
 Changes file size on Windows
@@ -1504,7 +1512,7 @@ If file is normal, file system allocates storage.
 bool
 os_file_change_size_win32(
 	const char*	pathname,
-	os_file_t	file,
+	const os_file_t&	file,
 	os_offset_t	size);
 
 #endif /*_WIN32 */
@@ -1516,7 +1524,7 @@ os_file_change_size_win32(
 @return DB_SUCCESS or error code */
 dberr_t
 os_file_punch_hole(
-	os_file_t	fh,
+	const os_file_t&	fh,
 	os_offset_t	off,
 	os_offset_t	len)
 	MY_ATTRIBUTE((warn_unused_result));

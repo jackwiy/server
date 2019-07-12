@@ -743,7 +743,7 @@ SyncFileIO::execute(const IORequest& request)
 static
 dberr_t
 os_file_punch_hole_posix(
-	os_file_t	fh,
+	const os_file_t&	fh,
 	os_offset_t	off,
 	os_offset_t	len)
 {
@@ -972,7 +972,7 @@ Flushes the write buffers of a given file to the disk.
 @return true if success */
 bool
 os_file_flush_func(
-	os_file_t	file)
+	const os_file_t&	file)
 {
 	int	ret;
 
@@ -1646,7 +1646,7 @@ os_file_get_last_error.
 @return true if success */
 bool
 os_file_close_func(
-	os_file_t	file)
+	const os_file_t&	file)
 {
 	int	ret = close(file);
 
@@ -1663,7 +1663,7 @@ os_file_close_func(
 @param[in]	file		handle to an open file
 @return file size, or (os_offset_t) -1 on failure */
 os_offset_t
-os_file_get_size(os_file_t file)
+os_file_get_size(const os_file_t& file)
 {
 	struct stat statbuf;
 	return fstat(file, &statbuf) ? os_offset_t(-1) : statbuf.st_size;
@@ -1910,7 +1910,7 @@ static WinIoInit win_io_init;
 static
 dberr_t
 os_file_punch_hole_win32(
-	os_file_t	fh,
+	const os_file_t&	fh,
 	os_offset_t	off,
 	os_offset_t	len)
 {
@@ -1981,7 +1981,7 @@ Flushes the write buffers of a given file to the disk.
 @return true if success */
 bool
 os_file_flush_func(
-	os_file_t	file)
+	const os_file_t&	file)
 {
 	++os_n_fsyncs;
 
@@ -2663,8 +2663,8 @@ os_file_create_func(
 		}
 	}
 
-	if (*success &&  (attributes & FILE_FLAG_OVERLAPPED)) {
-    aio->bind(file);
+	if (*success &&  (attributes & FILE_FLAG_OVERLAPPED) && aio) {
+		aio->bind(file);
 	}
 	return(file);
 }
@@ -2923,17 +2923,21 @@ os_file_get_last_error.
 @return true if success */
 bool
 os_file_close_func(
-	os_file_t	file)
+	const os_file_t&	file)
 {
-	ut_a(file);
+	ut_a(file != 0);
 
-	if (CloseHandle(file)) {
-		return(true);
+
+	if (!CloseHandle(file)) {
+		os_file_handle_error(NULL, "close");
+		return false;
 	}
 
-	os_file_handle_error(NULL, "close");
-
-	return(false);
+	if(aio)
+  {
+		aio->unbind(file);
+  }
+	return(true);
 }
 
 /** Gets a file size.
@@ -2941,7 +2945,7 @@ os_file_close_func(
 @return file size, or (os_offset_t) -1 on failure */
 os_offset_t
 os_file_get_size(
-	os_file_t	file)
+	const os_file_t&	file)
 {
 	DWORD		high;
 	DWORD		low = GetFileSize(file, &high);
@@ -3115,7 +3119,7 @@ Sets a sparse flag on Windows file.
 @return true on success, false on error
 */
 #include <versionhelpers.h>
-bool os_file_set_sparse_win32(os_file_t file, bool is_sparse)
+bool os_file_set_sparse_win32(const os_file_t& file, bool is_sparse)
 {
 	if (!is_sparse && !IsWindows8OrGreater()) {
 		/* Cannot  unset sparse flag on older Windows.
@@ -3149,7 +3153,7 @@ If file is normal, file system allocates storage.
 bool
 os_file_change_size_win32(
 	const char*	pathname,
-	os_file_t	file,
+	const os_file_t&	file,
 	os_offset_t	size)
 {
 	LARGE_INTEGER	length;
@@ -3317,7 +3321,7 @@ dberr_t
 os_file_write_func(
 	const IORequest&	type,
 	const char*		name,
-	os_file_t		file,
+	const os_file_t&		file,
 	const void*		buf,
 	os_offset_t		offset,
 	ulint			n)
@@ -3403,7 +3407,7 @@ static MY_ATTRIBUTE((warn_unused_result))
 dberr_t
 os_file_read_page(
 	const IORequest&	type,
-	os_file_t		file,
+	const os_file_t&	file,
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n,
@@ -3652,7 +3656,7 @@ of file.
 bool
 os_file_set_size(
 	const char*	name,
-	os_file_t	file,
+	const os_file_t&	file,
 	os_offset_t	size,
 	bool	is_sparse)
 {
@@ -3767,7 +3771,7 @@ fallback:
 bool
 os_file_truncate(
 	const char*	pathname,
-	os_file_t	file,
+	const os_file_t&	file,
 	os_offset_t	size,
 	bool		allow_shrink)
 {
@@ -3802,7 +3806,7 @@ Requests a synchronous positioned read operation.
 dberr_t
 os_file_read_func(
 	const IORequest&	type,
-	os_file_t		file,
+	const os_file_t&		file,
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n)
@@ -3824,7 +3828,7 @@ Requests a synchronous positioned read operation.
 dberr_t
 os_file_read_no_error_handling_func(
 	const IORequest&	type,
-	os_file_t		file,
+	const os_file_t&	file,
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n,
@@ -3858,7 +3862,7 @@ os_file_status(
 @return DB_SUCCESS or error code */
 dberr_t
 os_file_punch_hole(
-	os_file_t	fh,
+	const os_file_t&	fh,
 	os_offset_t	off,
 	os_offset_t	len)
 {
@@ -3880,7 +3884,7 @@ inline bool IORequest::should_punch_hole() const
 @param[in]	len		Size of the hole
 @return DB_SUCCESS or error code */
 dberr_t
-IORequest::punch_hole(os_file_t fh, os_offset_t off, ulint len)
+IORequest::punch_hole(const os_file_t& fh, os_offset_t off, ulint len)
 {
 	/* In this debugging mode, we act as if punch hole is supported,
 	and then skip any calls to actually punch a hole here.
@@ -3973,10 +3977,11 @@ extern void fil_aio_callback(native_file_handle fh,
 
 bool os_aio_init(ulint, ulint, ulint)
 {
-  tp= threadpool::create_threadpool_generic();
 #ifdef _WIN32
+  tp = threadpool::create_threadpool_win();
   aio = create_win_aio(tp);
 #else
+  tp = threadpool::create_threadpool_generic();
   aio = create_simulated_aio(tp);
 #endif
   aio->set_callback(fil_aio_callback);
@@ -4024,7 +4029,7 @@ os_aio_func(
 	IORequest&	type,
 	ulint		mode,
 	const char*	name,
-	pfs_os_file_t	file,
+	const pfs_os_file_t&	file,
 	void*		buf,
 	os_offset_t	offset,
 	ulint		n,
