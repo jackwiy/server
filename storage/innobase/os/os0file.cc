@@ -3992,6 +3992,8 @@ void os_aio_free(void)
 {
    delete tp;
 	 delete aio;
+   tp = nullptr;
+   aio = nullptr;
 }
 
 /** Waits until there are no pending writes. There can
