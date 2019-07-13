@@ -80,6 +80,7 @@ class aio_linux :public aio
         case 0:
           continue;
         default:
+          fprintf(stderr,"io_getenv returned %d\n",ret);
           abort();
       }
     }
@@ -100,11 +101,6 @@ public:
       else
        break;
     }
-    assert(max_count);
-    fprintf(stderr, "ret is %d, max_count is %zu", ret, max_count);
- 
-    assert(!ret);
-
     if (max_count == 0 || ret)
      abort();
     if (pthread_create(&m_getevent_thread,nullptr, getevent_thread_routine,this))
@@ -113,9 +109,9 @@ public:
   
   ~aio_linux()
   {
-    pthread_kill(m_getevent_thread, 0);
-    pthread_join(m_getevent_thread, 0);
+    m_in_shutdown = true;
     io_destroy(m_io_ctx);
+    pthread_join(m_getevent_thread, 0);
   }
 
   // Inherited via aio

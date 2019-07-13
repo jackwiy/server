@@ -3963,16 +3963,151 @@ extern void fil_aio_callback(native_file_handle fh,
   int err,
   void* userdata);
 
+#ifdef LINUX_NATIVE_AIO
+/** Checks if the system supports native linux aio. On some kernel
+versions where native aio is supported it won't work on tmpfs. In such
+cases we can't use native aio as it is not possible to mix simulated
+and native aio.
+@return: true if supported, false otherwise. */
+#include <libaio.h>
+static bool is_linux_native_aio_supported()
+{
+	File		fd;
+	io_context_t	io_ctx;
+	char		name[1000];
+
+	if (io_setup(1, &io_ctx)) {
+
+		/* The platform does not support native aio. */
+
+		return(false);
+
+	}
+	else if (!srv_read_only_mode) {
+
+		/* Now check if tmpdir supports native aio ops. */
+		fd = mysql_tmpfile("ib");
+
+		if (fd < 0) {
+			ib::warn()
+				<< "Unable to create temp file to check"
+				" native AIO support.";
+
+			return(false);
+		}
+	}
+	else {
+
+		os_normalize_path(srv_log_group_home_dir);
+
+		ulint	dirnamelen = strlen(srv_log_group_home_dir);
+
+		ut_a(dirnamelen < (sizeof name) - 10 - sizeof "ib_logfile");
+
+		memcpy(name, srv_log_group_home_dir, dirnamelen);
+
+		/* Add a path separator if needed. */
+		if (dirnamelen && name[dirnamelen - 1] != OS_PATH_SEPARATOR) {
+
+			name[dirnamelen++] = OS_PATH_SEPARATOR;
+		}
+
+		strcpy(name + dirnamelen, "ib_logfile0");
+
+		fd = my_open(name, O_RDONLY | O_CLOEXEC, MYF(0));
+
+		if (fd == -1) {
+
+			ib::warn()
+				<< "Unable to open"
+				<< " \"" << name << "\" to check native"
+				<< " AIO read support.";
+
+			return(false);
+		}
+	}
+
+	struct io_event	io_event;
+
+	memset(&io_event, 0x0, sizeof(io_event));
+
+	byte* buf = static_cast<byte*>(ut_malloc_nokey(srv_page_size * 2));
+	byte* ptr = static_cast<byte*>(ut_align(buf, srv_page_size));
+
+	struct iocb	iocb;
+
+	/* Suppress valgrind warning. */
+	memset(buf, 0x00, srv_page_size * 2);
+	memset(&iocb, 0x0, sizeof(iocb));
+
+	struct iocb* p_iocb = &iocb;
+
+	if (!srv_read_only_mode) {
+
+		io_prep_pwrite(p_iocb, fd, ptr, srv_page_size, 0);
+
+	}
+	else {
+		ut_a(srv_page_size >= 512);
+		io_prep_pread(p_iocb, fd, ptr, 512, 0);
+	}
+
+	int	err = io_submit(io_ctx, 1, &p_iocb);
+	srv_stats.buffered_aio_submitted.inc();
+
+	if (err >= 1) {
+		/* Now collect the submitted IO request. */
+		err = io_getevents(io_ctx, 1, 1, &io_event, NULL);
+	}
+
+	ut_free(buf);
+	my_close(fd, MYF(MY_WME));
+
+	switch (err) {
+	case 1:
+		return(true);
+
+	case -EINVAL:
+	case -ENOSYS:
+		ib::error()
+			<< "Linux Native AIO not supported. You can either"
+			" move "
+			<< (srv_read_only_mode ? name : "tmpdir")
+			<< " to a file system that supports native"
+			" AIO or you can set innodb_use_native_aio to"
+			" FALSE to avoid this message.";
+
+		/* fall through. */
+	default:
+		ib::error()
+			<< "Linux Native AIO check on "
+			<< (srv_read_only_mode ? name : "tmpdir")
+			<< "returned error[" << -err << "]";
+	}
+
+	return(false);
+}
+#endif
+
+const int MAX_IO_EVENTS=10000;
+
 bool os_aio_init(ulint n_reader_threads, ulint n_writer_thread, ulint)
 {
   if (srv_use_native_aio)
   {
 #ifdef _WIN32
     tp = threadpool::create_threadpool_win();
-    aio = create_win_aio(tp, 10000);
-#elif defined (LINUX_NATIVE_AIO) && 0
+    aio = create_win_aio(tp, MAX_IO_EVENTS);
+#elif defined (LINUX_NATIVE_AIO)
     tp = threadpool::create_threadpool_generic();
-    aio = create_linux_aio(tp, 10000);
+    if (is_linux_native_aio_supported())
+      aio = create_linux_aio(tp, MAX_IO_EVENTS);
+    else
+    {
+        ib::warn() << "Linux Native AIO disabled.";
+        srv_use_native_aio = FALSE;
+        aio = create_simulated_aio(tp, n_reader_threads, n_writer_thread);
+    }
 #endif
   }
   else
