@@ -1,35 +1,47 @@
 #pragma once
-#include <queue>
+#include <vector>
+#include <stack>
 #include <mutex>
 #include <condition_variable>
-#include "aio0aio.h"
 
-class aiocb_cache
+enum aio_cache_notification_mode
 {
-  std::mutex mtx;
-  std::condition_variable cv_not_empty;
-  std::queue<aiocb *> cache;
-  size_t pos;
+  NOTIFY_ONE,
+  NOTIFY_ALL
+};
+
+template<typename T> class aio_cache
+{
+  std::mutex m_mtx;
+  std::condition_variable m_cv;
+  std::vector<T>  m_base;
+  std::vector<T*> m_cache;
+  aio_cache_notification_mode m_notifcation_mode;
 public:
-  aiocb_cache(size_t count):mtx(), cv_not_empty(), cache()
+  aio_cache(size_t count, aio_cache_notification_mode mode= NOTIFY_ALL):
+  m_mtx(), m_cv(), m_base(count),m_cache(count), m_notifcation_mode(mode)
   {
-    for(auto i = 0 ; i < count; i++)
-      cache.push(new aiocb);
+    for(size_t i = 0 ; i < count; i++)
+      m_cache[i]=&m_base[i];
   }
 
-  aiocb* acquire()
+  T* get()
   {
-    std::unique_lock<std::mutex> lk(mtx);
-    while(cache.empty())
-      cv_not_empty.wait(lk);
-    aiocb *cb = cache.front();
-    cache.pop();
-    return cb;
+    std::unique_lock<std::mutex> lk(m_mtx);
+    while(m_cache.empty())
+     m_cv.wait(lk);
+    T* ret = m_cache.back();
+    m_cache.pop_back();
+    return ret;
   }
   
-  void release(aiocb *cb)
+  void put(T *ele)
   {
-    std::unique_lock<std::mutex> lk(mtx);
-    cache.push(cb);
+    std::unique_lock<std::mutex> lk(m_mtx);
+    m_cache.push_back(ele);
+    if (m_notifcation_mode == NOTIFY_ONE)
+      m_cv.notify_one();
+    else if(m_cache.size() == 1)
+      m_cv.notify_all();
   }
 };

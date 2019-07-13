@@ -4140,7 +4140,7 @@ fil_io(
 		   && !recv_no_ibuf_operations
 		   && ibuf_page(page_id, zip_size, NULL)) {
 
-		mode = OS_AIO_IBUF;
+		mode = OS_AIO_SYNC; //OS_AIO_IBUF
 
 		/* Reduce probability of deadlock bugs in connection with ibuf:
 		do not let the ibuf i/o handler sleep */
@@ -4325,7 +4325,7 @@ fil_io(
 
 #include <aio0aio.h>
 
-/**********************************************************************//**
+/**********************************************************************/
 
 /* Callback for AIO completion */
 void

@@ -121,11 +121,6 @@ extern bool buf_page_cleaner_is_active;
 #endif /* WITH_INNODB_DISALLOW_WRITES */
 
 
-
-/** If the following is true, read i/o handler threads try to
-wait until a batch of new read requests have been posted */
-static bool		os_aio_recommend_sleep_for_read_threads;
-
 ulint	os_n_file_reads;
 static ulint	os_bytes_read_since_printout;
 ulint	os_n_file_writes;
@@ -140,18 +135,12 @@ bool	os_has_said_disk_full;
 /** Default Zip compression level */
 extern uint page_zip_level;
 
-/** Validates the consistency of the aio system.
-@return true if ok */
-static
-bool
-os_aio_validate();
-
 #ifdef UNIV_PFS_IO
 /* Keys to register InnoDB I/O with performance schema */
 mysql_pfs_key_t  innodb_data_file_key;
 mysql_pfs_key_t  innodb_log_file_key;
 mysql_pfs_key_t  innodb_temp_file_key;
-#endif /* U
+#endif
 
 /** Handle errors for file operations.
 @param[in]	name		name of a file or NULL
@@ -2934,9 +2923,8 @@ os_file_close_func(
 	}
 
 	if(aio)
-  {
 		aio->unbind(file);
-  }
+ 
 	return(true);
 }
 
@@ -3975,15 +3963,23 @@ extern void fil_aio_callback(native_file_handle fh,
   int err,
   void* userdata);
 
-bool os_aio_init(ulint, ulint, ulint)
+bool os_aio_init(ulint n_reader_threads, ulint n_writer_thread, ulint)
 {
+  if (srv_use_native_aio)
+  {
 #ifdef _WIN32
-  tp = threadpool::create_threadpool_win();
-  aio = create_win_aio(tp);
-#else
-  tp = threadpool::create_threadpool_generic();
-  aio = create_simulated_aio(tp);
+    tp = threadpool::create_threadpool_win();
+    aio = create_win_aio(tp, 10000);
+#elif defined (LINUX_NATIVE_AIO) && 0
+    tp = threadpool::create_threadpool_generic();
+    aio = create_linux_aio(tp, 10000);
 #endif
+  }
+  else
+  {
+    tp = threadpool::create_threadpool_generic();
+    aio = create_simulated_aio(tp, n_reader_threads, n_writer_thread);
+  }
   aio->set_callback(fil_aio_callback);
   return true;
 }

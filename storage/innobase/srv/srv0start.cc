@@ -173,8 +173,6 @@ enum srv_shutdown_t	srv_shutdown_state = SRV_SHUTDOWN_NONE;
 /** Files comprising the system tablespace */
 pfs_os_file_t	files[1000];
 
-/** io_handler_thread parameters for thread identification */
-static ulint		n[SRV_MAX_N_IO_THREADS + 6];
 /** io_handler_thread identifiers, 32 is the maximum number of purge threads  */
 /** 6 is the ? */
 #define	START_OLD_THREAD_CNT	(SRV_MAX_N_IO_THREADS + 6 + 32)

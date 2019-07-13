@@ -4,11 +4,12 @@
 #include <unistd.h> /* pread(), pwrite() */
 #endif
 #include <string.h>
+#include "aiocb_cache.h"
+
 class simulated_aio;
 
 struct simulated_iocb
 {
-  simulated_iocb *next;
   native_file_handle fd;
   aio_opcode opcode;
   unsigned long long offset;
@@ -16,48 +17,6 @@ struct simulated_iocb
   unsigned int len;
   simulated_aio *aio;
   char userdata[MAX_AIO_USERDATA_LEN];
-};
-
-struct simulated_iocb_cache
-{
-  simulated_iocb *m_head;
-  std::mutex m_mtx;
-  simulated_iocb_cache() :m_mtx(), m_head()
-  {
-
-  }
-  simulated_iocb* get()
-  {
-   simulated_iocb *ret = 0;
-   m_mtx.lock();
-   if(m_head)
-   {
-     ret = m_head;
-     m_head = m_head->next;
-   }
-   m_mtx.unlock();
-   return ret?ret:new simulated_iocb;
-  }
-  void put(simulated_iocb* iocb)
-  {
-    m_mtx.lock();
-    iocb->next = m_head;
-    m_head= iocb;
-    m_mtx.unlock();
-  }
-  ~simulated_iocb_cache()
-  {
-    m_mtx.lock();
-    for (;;)
-    {
-      simulated_iocb *cur=m_head;
-      if (!cur)
-        break;
-      m_head = cur->next;
-      delete cur;
-    }
-    m_mtx.unlock();
-  }
 };
 
 
@@ -68,14 +27,16 @@ struct sync_io_event
   sync_io_event()
   {
     m_event = CreateEvent(0, FALSE, FALSE, 0);
+    m_event = (HANDLE)(((uintptr_t)m_event)|1);
   }
   ~sync_io_event()
   {
+    m_event = (HANDLE)(((uintptr_t)m_event) & ~1);
     CloseHandle(m_event);
   }
 };
 static thread_local sync_io_event sync_event;
-#
+
 static int pread(const native_file_handle& h, void* buf, size_t count, unsigned long long offset)
 {
   OVERLAPPED ov{};
@@ -113,10 +74,13 @@ static int pwrite(const native_file_handle& h, void* buf, size_t count, unsigned
 
 class simulated_aio :public aio
 {
-  simulated_iocb_cache m_iocb_cache;
-  threadpool::threadpool *m_tp;
+  threadpool::threadpool* m_tp; 
+  aio_cache<simulated_iocb> m_read_cache;
+  aio_cache<simulated_iocb> m_write_cache;
+
 public:
-  simulated_aio(threadpool::threadpool* tp):m_tp(tp),m_iocb_cache()
+  simulated_aio(threadpool::threadpool* tp, size_t read_threads, size_t write_threads):
+    m_tp(tp), m_read_cache(read_threads,NOTIFY_ONE),m_write_cache(write_threads, NOTIFY_ONE)
   {
   }
  
@@ -124,16 +88,17 @@ public:
   {
     simulated_iocb iocb= *(simulated_iocb *)param;
     simulated_aio *aio = iocb.aio;
-    aio->m_iocb_cache.put((simulated_iocb*)param);
     int ret_len;
     int err = 0;
     switch (iocb.opcode)
     {
       case AIO_PREAD:
         ret_len = pread(iocb.fd, iocb.buffer, iocb.len, iocb.offset);
+        aio->m_read_cache.put((simulated_iocb*)param);
         break;
       case AIO_PWRITE:
         ret_len = pwrite(iocb.fd, iocb.buffer, iocb.len, iocb.offset);
+        aio->m_write_cache.put((simulated_iocb*)param);
         break;
       default:
         abort();
@@ -151,7 +116,7 @@ public:
 
   virtual int submit(const native_file_handle& fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
   {
-    simulated_iocb *iocb= m_iocb_cache.get();
+    simulated_iocb *iocb= opcode == AIO_PREAD? m_read_cache.get(): m_write_cache.get();
     iocb->aio = this;
     iocb->buffer = buffer;
     iocb->fd = fd;
@@ -165,7 +130,7 @@ public:
   }
 };
 
-aio* create_simulated_aio(threadpool::threadpool* tp)
+aio* create_simulated_aio(threadpool::threadpool* tp, size_t read_threads, size_t write_threads)
 {
-  return new simulated_aio(tp);
+  return new simulated_aio(tp, read_threads, write_threads);
 }

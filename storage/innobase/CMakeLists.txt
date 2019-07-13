@@ -23,6 +23,7 @@ INCLUDE(innodb.cmake)
 SET(INNOBASE_SOURCES
 	aio/aio_simulated.cc
 	aio/aiocb_cache.h
+	aio/aio.cc
 	btr/btr0btr.cc
 	btr/btr0bulk.cc
 	btr/btr0cur.cc
@@ -154,11 +155,14 @@ SET(INNOBASE_SOURCES
 	ut/ut0timer.cc)
 
 IF(WIN32)
-LIST(APPEND INNOBASE_SOURCES
-	aio/aio_win.cc
-	tp/threadpool_win.cc)
+	LIST(APPEND INNOBASE_SOURCES
+		aio/aio_win.cc
+		tp/threadpool_win.cc)
 ENDIF()
-
+IF(CMAKE_SYSTEM_NAME  MATCHES Linux AND HAVE_LIBAIO_H AND HAVE_LIBAIO)
+	LIST(APPEND INNOBASE_SOURCES
+		aio/aio_linux.cc)
+ENDIF()
 MYSQL_ADD_PLUGIN(innobase ${INNOBASE_SOURCES} STORAGE_ENGINE
   MODULE_OUTPUT_NAME ha_innodb
   DEFAULT RECOMPILE_FOR_EMBEDDED

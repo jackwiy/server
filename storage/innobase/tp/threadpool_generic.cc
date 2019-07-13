@@ -46,7 +46,6 @@ threadpool_generic::worker_main()
 {
 	std::condition_variable cv;
 	std::unique_lock<std::mutex> lk(m_mtx);
-	size_t index = size_t(-1);
 	for (;;) {
 		task t;
 		if (m_tasks.empty()) {
@@ -131,17 +130,18 @@ threadpool_generic::wake()
 	return true;
 }
 threadpool_generic::threadpool_generic()
-    : m_concurrency(std::thread::hardware_concurrency()), 
-      m_tasks(), 
+      :m_tasks(), 
+      m_standby_threads(),
       m_mtx(),
-      m_standby_threads(), 
+      m_thread_timeout(std::chrono::milliseconds(60000)),
+      m_timer_interval(std::chrono::milliseconds(10)),
       m_cv_no_threads(), 
       m_cv_shutdown(),
       m_threads(),
       m_active_threads(), 
       m_tasks_dequeued(),
-      m_timer_interval(std::chrono::milliseconds(10)),
-      m_thread_timeout(std::chrono::milliseconds(60000)), m_in_shutdown(),
+      m_concurrency(std::thread::hardware_concurrency()),
+      m_in_shutdown(),
       m_stopped()
 {
 	m_timer_thread = std::thread(&threadpool_generic::timer_main, this);

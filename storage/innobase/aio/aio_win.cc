@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "aio0aio.h"
+#include "aiocb_cache.h"
 #include "tp0tp.h"
 
 class win_aio;
@@ -21,63 +22,15 @@ struct OVERLAPPED_EXTENDED: OVERLAPPED
   char userdata[MAX_AIO_USERDATA_LEN];
 };
 
-struct OVERLAPPED_SLIST_ENTRY: SLIST_ENTRY
-{
-  OVERLAPPED_EXTENDED ov;
-};
-
-struct overlapped_cache
-{
-  SLIST_HEADER* list_head;
-  overlapped_cache()
-  {
-    list_head= (SLIST_HEADER*)_aligned_malloc(sizeof(OVERLAPPED_SLIST_ENTRY),MEMORY_ALLOCATION_ALIGNMENT);
-    if(list_head)
-    {
-      InitializeSListHead(list_head);
-      return;
-    }
-    abort();
-  }
-  ~overlapped_cache()
-  {
-    for(;;)
-    {
-      SLIST_ENTRY* entry=InterlockedPopEntrySList(list_head);
-      if(!entry)
-        break;
-    }
-    _aligned_free(list_head);
-  }
-  OVERLAPPED_EXTENDED* get()
-  {
-    OVERLAPPED_SLIST_ENTRY* entry = (OVERLAPPED_SLIST_ENTRY *)InterlockedPopEntrySList(list_head);
-    if (entry)
-      return &entry->ov;
-    entry= (OVERLAPPED_SLIST_ENTRY*)_aligned_malloc(sizeof(OVERLAPPED_SLIST_ENTRY), MEMORY_ALLOCATION_ALIGNMENT);
-    if (entry)
-    {
-      memset(entry, 0, sizeof(*entry));
-      return &entry->ov;
-    }
-    abort();
-  }
-  void put(OVERLAPPED_EXTENDED* ov)
-  {
-    OVERLAPPED_SLIST_ENTRY *entry = (OVERLAPPED_SLIST_ENTRY *)((char *)ov - offsetof(OVERLAPPED_SLIST_ENTRY, ov));
-    InterlockedPushEntrySList(list_head, entry);
-  }
-};
-
 
 class win_aio_generic:public aio
 {
   HANDLE m_completion_port;
-  overlapped_cache m_overlapped_cache;
+  aio_cache<OVERLAPPED_EXTENDED> m_overlapped_cache;
   HANDLE m_io_completion_thread;
   threadpool::threadpool *m_pool;
 public:
-  win_aio_generic(threadpool::threadpool *pool):m_pool(pool),m_completion_port(),m_overlapped_cache()
+  win_aio_generic(threadpool::threadpool *pool,size_t max_io_count): m_pool(pool),m_completion_port(),m_overlapped_cache(max_io_count)
   {
     m_completion_port = CreateIoCompletionPort(INVALID_HANDLE_VALUE,0,0,0);
     DWORD tid;
@@ -95,7 +48,6 @@ public:
         err = GetLastError();
     }
     aio->execute_callback(ov.fd, ov.opcode, (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset , ov.buffer, ov.len, ov.bytes_transferred, err, ov.userdata);
-
   }
   static DWORD WINAPI io_completion_routine(void* par)
   {
@@ -109,7 +61,6 @@ public:
       {
         OVERLAPPED_EXTENDED* ov = (OVERLAPPED_EXTENDED*)arr[i].lpOverlapped;
         ov->bytes_transferred = arr[i].dwNumberOfBytesTransferred;
-
         threadpool::task t;
         t.m_func = execute_io_completion;
         t.m_arg = ov;
@@ -126,6 +77,7 @@ public:
       return -1;
     return 0;
   }
+  
   virtual int submit(const native_file_handle& fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
   {
     OVERLAPPED_EXTENDED* ov = m_overlapped_cache.get();
@@ -163,10 +115,10 @@ public:
 
 class win_aio_native_tp :public aio
 {
-  overlapped_cache m_overlapped_cache;
+  aio_cache<OVERLAPPED_EXTENDED> m_overlapped_cache;
   PTP_CALLBACK_ENVIRON m_env;
 public:
-  win_aio_native_tp(threadpool::threadpool* pool) : m_overlapped_cache()
+  win_aio_native_tp(threadpool::threadpool* pool, size_t max_io_count) : m_overlapped_cache(max_io_count)
   {
     m_env = (PTP_CALLBACK_ENVIRON) pool->get_native_env();
   }
@@ -192,6 +144,7 @@ public:
       CloseThreadpoolIo(fd.m_ptp_io);
     }
   }
+
   virtual int submit(const native_file_handle& fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
   {
     OVERLAPPED_EXTENDED* ov = m_overlapped_cache.get();
@@ -228,9 +181,9 @@ public:
 };
 
 
-aio* create_win_aio(threadpool::threadpool* tp)
+aio* create_win_aio(threadpool::threadpool* tp, size_t max_io_count)
 {
   if (tp->is_native())
-    return new win_aio_native_tp(tp);
-  return new win_aio_generic(tp);
+    return new win_aio_native_tp(tp, max_io_count);
+  return new win_aio_generic(tp, max_io_count);
 }
