@@ -22,7 +22,6 @@ struct OVERLAPPED_EXTENDED: OVERLAPPED
   char userdata[MAX_AIO_USERDATA_LEN];
 };
 
-
 class win_aio_generic:public aio
 {
   HANDLE m_completion_port;
