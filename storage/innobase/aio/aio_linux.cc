@@ -14,30 +14,6 @@ struct linux_iocb:iocb
   char userdata[MAX_AIO_USERDATA_LEN];
 };
 
-/*
-  Create an asynchronous I/O context
-
-  Can decrease nr_events, if it fails with EAGAIN.
-  (meaning, that per-user resources were exceeded
-  (/proc/sys/fs/aio-max-nr /proc/sys/fs/aio-nr)
-
-  @return actual nr_events used with io_setup(),
-          0 indicates an error.
-*/
-static int do_io_setup(io_context_t *ctx,int nr_events)
-{
-  int ret;
-  do
-  {
-    memset(ctx, 0, sizeof(*ctx));
-    ret = io_setup(nr_events, ctx);
-    if (ret == 0)
-      return nr_events;
-    nr_events /= 2;
-  }
-  while(nr_events >= 128 && ret == -EAGAIN);
-  return 0;
-}
 
 class aio_linux :public aio
 {
@@ -105,7 +81,7 @@ class aio_linux :public aio
         case 0:
           continue;
         default:
-          fprintf(stderr,"io_getenv returned %d\n",ret);
+          fprintf(stderr,"io_getevents returned %d\n",ret);
           abort();
       }
     }
@@ -163,8 +139,11 @@ public:
 aio* create_linux_aio(threadpool::threadpool* tp, size_t max_io_count)
 {
   io_context_t ctx;
-  int real_max_count= do_io_setup(&ctx, max_io_count);
-  if (!real_max_count)
-    return 0;
-  return new aio_linux(ctx,tp, real_max_count);
+  int ret= io_setup((int)max_io_count, &ctx);
+  if (ret)
+  {
+    fprintf(stderr, "io_setup(%zu) returned  %d\n",max_io_count, ret);
+    return nullptr;
+  }
+  return new aio_linux(ctx,tp, max_io_count);
 }
