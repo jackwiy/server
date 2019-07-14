@@ -14,27 +14,28 @@ struct linux_iocb:iocb
   char userdata[MAX_AIO_USERDATA_LEN];
 };
 
-static int get_real_max_io_count(int max_count)
+/*
+  Create an asynchronous I/O context
+
+  Can decrease nr_events, if it fails with EAGAIN.
+  (meaning, that per-user resources were exceeded
+  (/proc/sys/fs/aio-max-nr /proc/sys/fs/aio-nr)
+
+  @return actual nr_events used with io_setup(),
+          0 indicates an error.
+*/
+static int do_io_setup(io_context_t *ctx,int nr_events)
 {
-  io_context_t ctx;
-  while (max_count)
+  int ret;
+  do
   {
-    memset(&ctx, 0, sizeof(ctx));
-    int ret = io_setup(max_count, &ctx);
+    memset(ctx, 0, sizeof(*ctx));
+    ret = io_setup(nr_events, ctx);
     if (ret == 0)
-    {
-      io_destroy(ctx);
-      return max_count;
-    }
-    if (ret == -EAGAIN)
-    {
-       max_count /= 2;
-    }
-    else
-    {
-      return 0;
-    }
+      return nr_events;
+    nr_events /= 2;
   }
+  while(nr_events >= 128 && ret == -EAGAIN);
   return 0;
 }
 
@@ -112,19 +113,12 @@ class aio_linux :public aio
   }
 
 public:
-  aio_linux(threadpool::threadpool *tp, size_t max_count):
-    m_max_io_count(get_real_max_io_count(max_count)),
+  aio_linux(io_context_t ctx, threadpool::threadpool *tp, size_t max_count):
+    m_max_io_count(max_count),
     m_tp(tp), 
-    m_io_ctx(),
-    m_cache(m_max_io_count)
+    m_io_ctx(ctx),
+    m_cache(max_count)
   {
-    int ret;
-    if (!m_max_io_count)
-      abort();
-    ret = io_setup(m_max_io_count, &m_io_ctx);
-    
-    if (ret)
-     abort();
     if (pthread_create(&m_getevent_thread,nullptr, getevent_thread_routine,this))
      abort();
   }
@@ -168,5 +162,9 @@ public:
 
 aio* create_linux_aio(threadpool::threadpool* tp, size_t max_io_count)
 {
-  return new aio_linux(tp, max_io_count);
+  io_context_t ctx;
+  int real_max_count= do_io_setup(&ctx, max_io_count);
+  if (!real_max_count)
+    return 0;
+  return new aio_linux(ctx,tp, real_max_count);
 }

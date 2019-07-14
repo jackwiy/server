@@ -4089,24 +4089,28 @@ static bool is_linux_native_aio_supported()
 }
 #endif
 
-const int MAX_IO_EVENTS=10000;
 
 bool os_aio_init(ulint n_reader_threads, ulint n_writer_thread, ulint)
 {
+  int max_io_events = (int)((n_reader_threads + n_reader_threads) * (8 * OS_AIO_N_PENDING_IOS_PER_THREAD));
   if (srv_use_native_aio)
   {
 #ifdef _WIN32
     tp = threadpool::create_threadpool_win();
-    aio = create_win_aio(tp, MAX_IO_EVENTS);
+    aio = create_win_aio(tp, max_io_events);
 #elif defined (LINUX_NATIVE_AIO)
     tp = threadpool::create_threadpool_generic();
+    aio = nullptr;
     if (is_linux_native_aio_supported())
-      aio = create_linux_aio(tp, MAX_IO_EVENTS);
-    else
     {
-        ib::warn() << "Linux Native AIO disabled.";
-        srv_use_native_aio = FALSE;
-        aio = create_simulated_aio(tp, n_reader_threads, n_writer_thread);
+      aio = create_linux_aio(tp, max_io_events);
+    }
+
+    if(!aio)
+    {
+      ib::warn() << "Linux Native AIO disabled.";
+      srv_use_native_aio = FALSE;
+      aio = create_simulated_aio(tp, n_reader_threads, n_writer_thread);
     }
 #endif
   }
@@ -4122,7 +4126,7 @@ bool os_aio_init(ulint n_reader_threads, ulint n_writer_thread, ulint)
 void os_aio_free(void)
 {
    delete tp;
-	 delete aio;
+   delete aio;
    tp = nullptr;
    aio = nullptr;
 }
