@@ -14,9 +14,33 @@ struct linux_iocb:iocb
   char userdata[MAX_AIO_USERDATA_LEN];
 };
 
+static int get_real_max_io_count(int max_count)
+{
+  io_context_t ctx;
+  while (max_count)
+  {
+    memset(&ctx, 0, sizeof(ctx));
+    int ret = io_setup(max_count, &ctx);
+    if (ret == 0)
+    {
+      io_destroy(ctx);
+      return max_count;
+    }
+    if (ret == -EAGAIN)
+    {
+       max_count /= 2;
+    }
+    else
+    {
+      return 0;
+    }
+  }
+  return 0;
+}
 
 class aio_linux :public aio
 {
+  int m_max_io_count;
   threadpool::threadpool* m_tp;
   io_context_t m_io_ctx;
   aio_cache<linux_iocb> m_cache;
@@ -88,20 +112,18 @@ class aio_linux :public aio
   }
 
 public:
-  aio_linux(threadpool::threadpool *tp, size_t max_count):m_tp(tp), m_io_ctx(),m_cache(max_count)
+  aio_linux(threadpool::threadpool *tp, size_t max_count):
+    m_max_io_count(get_real_max_io_count(max_count)),
+    m_tp(tp), 
+    m_io_ctx(),
+    m_cache(m_max_io_count)
   {
     int ret;
-    while(max_count)
-    {
-      ret = io_setup(max_count, &m_io_ctx);
-      if (ret == -EAGAIN && max_count > 1)
-      {
-        max_count /= 2;
-      }
-      else
-       break;
-    }
-    if (max_count == 0 || ret)
+    if (!m_max_io_count)
+      abort();
+    ret = io_setup(m_max_io_count, &m_io_ctx);
+    
+    if (ret)
      abort();
     if (pthread_create(&m_getevent_thread,nullptr, getevent_thread_routine,this))
      abort();
@@ -138,15 +160,6 @@ public:
         usleep(IO_SUBMIT_EAGAIN_SLEEP_US);
         continue;
       }
-    }
-    if (ret == -EAGAIN)
-    {
-      /* Switch to sync IO. */
-      cb->ret_len=(opcode == AIO_PREAD)?
-        pread(fd, buffer, len, offset):
-        pwrite(fd, buffer, len, offset);
-      cb->err = cb->ret_len < 0 ? errno : 0;
-      m_tp->submit({execute_io_completion,cb});
     }
     errno = -ret;
     return -1;
