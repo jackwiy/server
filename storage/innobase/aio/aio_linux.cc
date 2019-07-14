@@ -114,6 +114,9 @@ public:
     pthread_join(m_getevent_thread, 0);
   }
 
+  static const int IO_SUBMIT_EAGAIN_RETRIES = 100;
+  static const int IO_SUBMIT_EAGAIN_SLEEP_US = 1000000;
+
   // Inherited via aio
   virtual int submit(const native_file_handle& fd, aio_opcode opcode, unsigned long long offset, void* buffer, unsigned int len, void* userdata, size_t userdata_len) override
   {
@@ -130,11 +133,23 @@ public:
       ret = io_submit(m_io_ctx, 1, (iocb **)&cb);
       if (ret == 1)
         return 0;
-      if (ret == -EAGAIN && n_retries < 5)
+      if (ret == -EAGAIN && n_retries < IO_SUBMIT_EAGAIN_RETRIES)
+      {
+        usleep(IO_SUBMIT_EAGAIN_SLEEP_US);
         continue;
-      errno = -ret;
-      return -1;
+      }
     }
+    if (ret == -EAGAIN)
+    {
+      /* Switch to sync IO. */
+      cb->ret_len=(opcode == AIO_PREAD)?
+        pread(fd, buffer, len, offset):
+        pwrite(fd, buffer, len, offset);
+      cb->err = cb->ret_len < 0 ? errno : 0;
+      m_tp->submit({execute_io_completion,cb});
+    }
+    errno = -ret;
+    return -1;
   }
 };
 
