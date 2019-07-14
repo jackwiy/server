@@ -80,6 +80,7 @@ SET(CPACK_RPM_SPEC_MORE_DEFINE "
 %define mysqld_group mysql
 %define _bindir     ${INSTALL_BINDIRABS}
 %define _sbindir    ${INSTALL_SBINDIRABS}
+%define _mysharedir ${INSTALL_MYSQLSHAREDIRABS}
 %define _sysconfdir ${INSTALL_SYSCONFDIR}
 %define restart_flag_dir %{_localstatedir}/lib/rpm-state/mariadb
 %define restart_flag %{restart_flag_dir}/need-restart

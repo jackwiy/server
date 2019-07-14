@@ -96,6 +96,8 @@ Usage: $0 [OPTIONS]
                        user.  You must be root to use this option.  By default
                        mysqld runs using your current login name and files and
                        directories that it creates will be owned by you.
+   --sql-script=file   Execute this sql script instead of the default
+                       server initialization
 
 All other options are passed to the mysqld program
 
@@ -179,6 +181,7 @@ parse_arguments()
       --auth-root-socket-user=*)
         auth_root_socket_user="$(parse_arg "$arg")" ;;
       --skip-test-db) skip_test_db=1 ;;
+      --sql-script) sql_script="$(parse_arg "$arg")" ;;
 
       *)
         if test -n "$pick_args"
@@ -377,7 +380,7 @@ fill_system_tables="$srcpkgdatadir/mysql_system_tables_data.sql"
 maria_add_gis_sp="$buildpkgdatadir/maria_add_gis_sp_bootstrap.sql"
 mysql_test_db="$srcpkgdatadir/mysql_test_db.sql"
 
-for f in "$fill_help_tables" "$create_system_tables" "$create_system_tables2" "$fill_system_tables" "$maria_add_gis_sp" "$mysql_test_db"
+for f in "$fill_help_tables" "$create_system_tables" "$create_system_tables2" "$fill_system_tables" "$maria_add_gis_sp" "$mysql_test_db" $sql_script
 do
   if test ! -f "$f"
   then
@@ -489,7 +492,7 @@ then
   args="$args --user=$user"
 fi
 
-if test -f "$ldata/mysql/user.frm"
+if test -z "$sql_script" -a -f "$ldata/mysql/user.frm"
 then
     echo "mysql.user table already exists!"
     echo "Run mysql_upgrade, not mysql_install_db"
@@ -524,22 +527,30 @@ auth_root_socket_user=${auth_root_socket_user:-${user:-${USER:-root}}}
 
 cat_sql()
 {
-  echo "create database if not exists mysql;"
-  echo "use mysql;"
-
-  case "$auth_root_authentication_method" in
-    normal)
-      echo "SET @auth_root_socket=NULL;"
-      ;;
-    socket)
-      echo "SET @auth_root_socket='$auth_root_socket_user';"
-      ;;
-  esac
-
-  cat "$create_system_tables" "$create_system_tables2" "$fill_system_tables" "$fill_help_tables" "$maria_add_gis_sp"
-  if test "$skip_test_db" -eq 0
+  if test -z "$sql_script"
   then
-    cat "$mysql_test_db"
+    echo "create database if not exists mysql;"
+    echo "use mysql;"
+
+    case "$auth_root_authentication_method" in
+      normal)
+        echo "SET @auth_root_socket=NULL;"
+        ;;
+      socket)
+        echo "SET @auth_root_socket='$auth_root_socket_user';"
+        ;;
+    esac
+
+    cat "$create_system_tables" "$create_system_tables2" "$fill_system_tables" "$fill_help_tables" "$maria_add_gis_sp"
+    if test "$skip_test_db" -eq 0
+    then
+      cat "$mysql_test_db"
+    fi
+    for f in "$buildpkgdatadir"/*-postin.sql; do
+      test -f "$f"  && cat "$f"
+    done
+  else
+    cat $sql_script
   fi
 }
 
@@ -588,7 +599,7 @@ fi
 # Don't output verbose information if running inside bootstrap or using
 # --srcdir for testing.  In such cases, there's no end user looking at
 # the screen.
-if test "$cross_bootstrap" -eq 0 && test -z "$srcdir"
+if test "$cross_bootstrap" -eq 0 -a -z "$srcdir" -a -z "$sql_script"
 then
   s_echo
   s_echo "To start mysqld at boot time you have to copy"
