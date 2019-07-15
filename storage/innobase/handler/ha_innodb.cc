@@ -6249,6 +6249,8 @@ ha_innobase::open(const char* name, int, uint)
 
 	ib_table = open_dict_table(name, norm_name, is_part, ignore_err);
 
+	DEBUG_SYNC(thd, "ib_open_after_dict_open");
+
 	if (NULL == ib_table) {
 
 		if (is_part) {
