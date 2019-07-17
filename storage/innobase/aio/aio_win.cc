@@ -175,8 +175,9 @@ public:
     if (do_io(opcode,ov, fd, offset, len,buffer))
     {
       CancelThreadpoolIo(fd.m_ptp_io);
+      return -1;
     }
-    return -1;
+    return 0;
   }
 
   ~win_aio_native_tp()
