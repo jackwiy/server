@@ -76,7 +76,7 @@ namespace threadpool {
     std::condition_variable m_cv;
     worker_wake_reason m_wake_reason;
     task m_task;
-    worker_variable() :m_cv(), m_wake_reason(WAKE_REASON_NONE), m_task{}
+    worker_variable() :m_cv(), m_wake_reason(WAKE_REASON_NONE), m_task{0,0}
     {}
   };
 

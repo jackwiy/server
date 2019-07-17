@@ -7,12 +7,11 @@
 #include "tp0tp.h"
 
 class win_aio;
-
 class win_aio_generic;
 
 struct OVERLAPPED_EXTENDED: OVERLAPPED
 {
-  HANDLE fd;
+  native_file_handle fd;
   void* buffer;
   void* aio;
   unsigned int len;
@@ -21,6 +20,33 @@ struct OVERLAPPED_EXTENDED: OVERLAPPED
   enum aio_opcode opcode;
   char userdata[MAX_AIO_USERDATA_LEN];
 };
+
+static int do_io(aio_opcode opcode, 
+  OVERLAPPED *ov, 
+  const native_file_handle& fd,
+  unsigned long long offset, 
+  unsigned int len,
+  void *buffer
+)
+{
+  ov->Offset = (DWORD)offset;
+  ov->OffsetHigh = (DWORD)(offset >> 32);
+  BOOL ret;
+  switch (opcode)
+  {
+  case AIO_PREAD:
+    ret = ReadFile(fd, buffer, len, nullptr, ov);
+    break;
+  case AIO_PWRITE:
+    ret = WriteFile(fd, buffer, len, nullptr, ov);
+    break;
+  default:
+    abort();
+  }
+  if (ret || GetLastError() == ERROR_IO_PENDING)
+    return 0;
+  return -1;
+}
 
 class win_aio_generic:public aio
 {
@@ -46,11 +72,16 @@ public:
       if (!GetOverlappedResult(ov.fd, &ov, (DWORD*) & (ov.bytes_transferred), FALSE))
         err = GetLastError();
     }
-    aio->execute_callback(ov.fd, ov.opcode, (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset , ov.buffer, ov.len, ov.bytes_transferred, err, ov.userdata);
+    unsigned long long offset = (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset;
+    aio->execute_callback(ov.fd, ov.opcode, offset  , ov.buffer, ov.len, ov.bytes_transferred, err, ov.userdata);
   }
+ 
+  static const int MAX_EVENT_COUNT=64;
+
   static DWORD WINAPI io_completion_routine(void* par)
   {
-    OVERLAPPED_ENTRY arr[64];
+    OVERLAPPED_ENTRY arr[MAX_EVENT_COUNT];
+    threadpool::task tasks[MAX_EVENT_COUNT];
     ULONG count;
     win_aio_generic* aio = (win_aio_generic*)par;
 
@@ -60,10 +91,12 @@ public:
       {
         OVERLAPPED_EXTENDED* ov = (OVERLAPPED_EXTENDED*)arr[i].lpOverlapped;
         ov->bytes_transferred = arr[i].dwNumberOfBytesTransferred;
-        threadpool::task t;
-        t.m_func = execute_io_completion;
-        t.m_arg = ov;
-        aio->m_pool->submit(t);
+        tasks[i].m_arg = ov;
+        tasks[i].m_func = execute_io_completion;
+      }
+      if (count)
+      {
+        aio->m_pool->submit(tasks,count);
       }
     }
     return 0;
@@ -81,30 +114,13 @@ public:
   {
     OVERLAPPED_EXTENDED* ov = m_overlapped_cache.get();
     ov->fd = fd;
-    memcpy(ov->userdata,userdata, userdata_len);
-    ov->Offset = (DWORD)offset;
-    ov->OffsetHigh = (DWORD)(offset >> 32);
+    ov->aio = this;
     ov->len = len;
     ov->buffer = buffer;
     ov->opcode = opcode;
-    ov->aio= this;
-    BOOL ret;
-    switch (opcode)
-    {
-    case AIO_PREAD:
-      ret = ReadFile(fd, buffer, len, nullptr, ov);
-      break;
-    case AIO_PWRITE:
-      ret = WriteFile(fd, buffer, len, nullptr, ov);
-      break;
-    default:
-      abort();
-    }
-    if (ret || GetLastError() == ERROR_IO_PENDING)
-      return 0;
-    return -1;
+    memcpy(ov->userdata,userdata, userdata_len);
+    return do_io(opcode, ov, fd,offset, len, buffer);
   }
-
   ~win_aio_generic()
   {
     CloseHandle(m_completion_port);
@@ -127,7 +143,8 @@ public:
     OVERLAPPED_EXTENDED ov = *(OVERLAPPED_EXTENDED*)Overlapped;
     win_aio_native_tp *aio = (win_aio_native_tp * )ov.aio;
     aio->m_overlapped_cache.put((OVERLAPPED_EXTENDED*)Overlapped);
-    aio->execute_callback(ov.fd, ov.opcode, (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset, ov.buffer, ov.len, (int)NumberOfBytesTransferred, (int)IoResult, ov.userdata);
+    unsigned long long offset = (((unsigned long long)ov.OffsetHigh) << 32) + ov.Offset;
+    aio->execute_callback(ov.fd, ov.opcode, offset, ov.buffer, ov.len, (int)NumberOfBytesTransferred, (int)IoResult, ov.userdata);
   }
   
   virtual int bind(native_file_handle& fd) override
@@ -149,28 +166,16 @@ public:
     OVERLAPPED_EXTENDED* ov = m_overlapped_cache.get();
     ov->fd = fd;
     memcpy(ov->userdata, userdata, userdata_len);
-    ov->Offset = (DWORD)offset;
-    ov->OffsetHigh = (DWORD)(offset >> 32);
+    ov->aio = this;
     ov->len = len;
     ov->buffer = buffer;
     ov->opcode = opcode;
-    ov->aio = this;
-    BOOL ret;
+    
     StartThreadpoolIo(fd.m_ptp_io);
-    switch (opcode)
+    if (do_io(opcode,ov, fd, offset, len,buffer))
     {
-    case AIO_PREAD:
-      ret = ReadFile(fd, buffer, len, nullptr, ov);
-      break;
-    case AIO_PWRITE:
-      ret = WriteFile(fd, buffer, len, nullptr, ov);
-      break;
-    default:
-      abort();
+      CancelThreadpoolIo(fd.m_ptp_io);
     }
-    if (ret || GetLastError() == ERROR_IO_PENDING)
-      return 0;
-    CancelThreadpoolIo(fd.m_ptp_io);
     return -1;
   }
 
