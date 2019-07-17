@@ -410,7 +410,7 @@ void show_sql_type(enum_field_types type, uint16 metadata, String *str, CHARSET_
       CHARSET_INFO *cs= str->charset();
       uint32 length=
         cs->cset->snprintf(cs, (char*) str->ptr(), str->alloced_length(),
-                           "varchar(%u)", metadata);
+                           "varchar(%u(bytes))", metadata);
       str->length(length);
     }
     break;
@@ -460,22 +460,22 @@ void show_sql_type(enum_field_types type, uint16 metadata, String *str, CHARSET_
       it is necessary to check the pack length to figure out what kind
       of blob it really is.
      */
-    switch (get_blob_type_from_length(metadata))
+    switch (metadata)
     {
-    case MYSQL_TYPE_TINY_BLOB:
+    case 1:
       str->set_ascii(STRING_WITH_LEN("tinyblob"));
       break;
 
-    case MYSQL_TYPE_MEDIUM_BLOB:
+    case 2:
+      str->set_ascii(STRING_WITH_LEN("blob"));
+      break;
+
+    case 3:
       str->set_ascii(STRING_WITH_LEN("mediumblob"));
       break;
 
-    case MYSQL_TYPE_LONG_BLOB:
+    case 4:
       str->set_ascii(STRING_WITH_LEN("longblob"));
-      break;
-
-    case MYSQL_TYPE_BLOB:
-      str->set_ascii(STRING_WITH_LEN("blob"));
       break;
 
     default:
@@ -493,7 +493,7 @@ void show_sql_type(enum_field_types type, uint16 metadata, String *str, CHARSET_
       uint bytes= (((metadata >> 4) & 0x300) ^ 0x300) + (metadata & 0x00ff);
       uint32 length=
         cs->cset->snprintf(cs, (char*) str->ptr(), str->alloced_length(),
-                           "char(%d)", bytes / field_cs->mbmaxlen);
+                           "char(%d(bytes))", bytes);
       str->length(length);
     }
     break;
@@ -893,12 +893,33 @@ table_def::compatible_with(THD *thd, rpl_group_info *rgi,
       const char *tbl_name= table->s->table_name.str;
       char source_buf[MAX_FIELD_WIDTH];
       char target_buf[MAX_FIELD_WIDTH];
+      String field_sql_type;
       String source_type(source_buf, sizeof(source_buf), &my_charset_latin1);
       String target_type(target_buf, sizeof(target_buf), &my_charset_latin1);
       THD *thd= table->in_use;
 
-      show_sql_type(type(col), field_metadata(col), &source_type, field->charset());
-      field->sql_type(target_type);
+      show_sql_type(type(col), field_metadata(col), &source_type,
+                    field->charset());
+      if (field->has_charset() &&
+          (field->real_type() != MYSQL_TYPE_ENUM &&
+           field->real_type() != MYSQL_TYPE_SET) &&
+          (field->type() == MYSQL_TYPE_VARCHAR ||
+           field->type() == MYSQL_TYPE_STRING))
+      {
+        field_sql_type.append((field->type() == MYSQL_TYPE_VARCHAR) ?
+                              "varchar" : "char");
+        const CHARSET_INFO *cs= field->charset();
+        size_t length= cs->cset->snprintf(cs, (char*) target_type.ptr(),
+                                          target_type.alloced_length(),
+                                          "%s(%u(bytes) %s)",
+                                          field_sql_type.c_ptr_safe(),
+                                          field->field_length,
+                                          field->charset()->csname);
+        target_type.length(length);
+      }
+      else
+        field->sql_type(target_type);
+
       rli->report(ERROR_LEVEL, ER_SLAVE_CONVERSION_FAILED, rgi->gtid_info(),
                   ER_THD(thd, ER_SLAVE_CONVERSION_FAILED),
                   col, db_name, tbl_name,

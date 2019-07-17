@@ -1,0 +1,62 @@
+include/master-slave.inc
+[connection master]
+####################################################################
+# Test Case1: Improved error message with charset information
+####################################################################
+connection master;
+SET SQL_LOG_BIN=0;
+CREATE TABLE t1 (c1 VARCHAR(1) CHARACTER SET 'utf8mb3');
+SET SQL_LOG_BIN=1;
+connection slave;
+CREATE TABLE t1 (c1 VARCHAR(1) CHARACTER SET 'utf8mb4');
+connection master;
+INSERT INTO t1 VALUES ('a');
+connection slave;
+include/wait_for_slave_sql_error.inc [errno=1677]
+FOUND 1 /\'varchar\(3\(bytes\)\)\' to type \'varchar\(4\(bytes\) utf8mb4\)\'/ in mysqld.2.err
+connection master;
+DROP TABLE t1;
+connection slave;
+DROP TABLE t1;
+include/rpl_reset.inc
+####################################################################
+# Test Case2: Improved error message with charset information for CHAR
+# type
+####################################################################
+connection master;
+SET SQL_LOG_BIN=0;
+CREATE TABLE t1 (c1 CHAR(1) CHARACTER SET 'utf8mb3');
+SET SQL_LOG_BIN=1;
+connection slave;
+CREATE TABLE t1 (c1 CHAR(1) CHARACTER SET 'utf8mb4');
+connection master;
+INSERT INTO t1 VALUES ('a');
+connection slave;
+include/wait_for_slave_sql_error.inc [errno=1677]
+FOUND 1 /\'char\(3\(bytes\)\)\' to type \'char\(4\(bytes\) utf8mb4\)\'/ in mysqld.2.err
+connection master;
+DROP TABLE t1;
+connection slave;
+DROP TABLE t1;
+include/rpl_reset.inc
+####################################################################
+# Test Case3: For BLOB type fileds, when type conversion failed on
+# slave, the errormessage had incorrect type names.
+####################################################################
+connection master;
+SET SQL_LOG_BIN=0;
+CREATE TABLE t1 (c1 LONGBLOB);
+SET SQL_LOG_BIN=1;
+connection slave;
+CREATE TABLE t1 (c1 TINYBLOB);
+connection master;
+INSERT INTO t1 VALUES ('a');
+connection slave;
+include/wait_for_slave_sql_error.inc [errno=1677]
+FOUND 1 /\'longblob\' to type \'tinyblob\'/ in mysqld.2.err
+connection master;
+DROP TABLE t1;
+connection slave;
+DROP TABLE t1;
+include/rpl_reset.inc
+include/rpl_end.inc
